@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Unitel AI Hub — Нэвтрэх</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* Дизайны системийн үндэс (Өмнөх загваруудаас авсан) */
+    :root {
+      --green: #00b140;
+      --green-dark: #008a31;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --ink: #1e293b;
+      --ink-light: #475569;
+      --ink-subtle: #94a3b8;
+      --border-color: #e2e8f0;
+      --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      --shadow-brand: 0 10px 20px -5px rgba(0, 177, 64, 0.25);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Montserrat', sans-serif;
+      background-color: var(--bg);
+      color: var(--ink);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    /* Нэвтрэх хэсгийн үндсэн карт */
+    .login-panel {
+      width: 100%;
+      max-width: 900px;
+      margin: 20px;
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      background: var(--card-bg);
+      border-radius: 24px;
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+    
+    /* Зүүн тал - Форм */
+    .form-section {
+      padding: 48px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .form-section .logo { height: 36px; margin-bottom: 24px; align-self: flex-start; }
+    .form-section h1 { font-size: 28px; margin-bottom: 8px; }
+    .form-section p { color: var(--ink-light); margin-bottom: 32px; }
+
+    .input-group {
+      position: relative;
+      margin-bottom: 20px;
+    }
+    
+    .input-group .icon {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--ink-subtle);
+      pointer-events: none;
+    }
+    
+    .input {
+      width: 100%;
+      padding: 14px 16px 14px 50px; /* icon-д зориулсан зүүн талын зай */
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      font-size: 16px;
+      font-family: 'Montserrat', sans-serif;
+      transition: all .2s ease;
+    }
+    .input:focus {
+      outline: none;
+      border-color: var(--green);
+      box-shadow: 0 0 0 4px rgba(0, 177, 64, .15);
+    }
+    
+    .password-toggle {
+      position: absolute;
+      right: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--ink-light);
+    }
+    
+    .actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+    .actions label { display: flex; align-items: center; gap: 8px; color: var(--ink-light); cursor: pointer; }
+    .actions a { color: var(--green); text-decoration: none; font-weight: 600; }
+    .actions a:hover { text-decoration: underline; }
+
+    .btn-login {
+      width: 100%;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      padding: 16px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: var(--shadow-brand);
+      transition: all .2s ease;
+    }
+    .btn-login:hover { transform: translateY(-2px); filter: brightness(1.05); }
+
+    /* Баруун тал - Брендинг (WOW Factor) */
+    .branding-section {
+      position: relative;
+      background: linear-gradient(160deg, var(--green) 0%, var(--green-dark) 100%);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 48px;
+      overflow: hidden;
+    }
+    .branding-section h2 { font-size: 32px; line-height: 1.3; margin-bottom: 16px; z-index: 2;}
+    .branding-section p { font-size: 16px; opacity: 0.8; line-height: 1.6; z-index: 2; }
+    
+    /* Гоёмсог арын дүрснүүд */
+    .branding-section::before,
+    .branding-section::after {
+      content: '';
+      position: absolute;
+      border-radius: 50%;
+      z-index: 1;
+      opacity: 0.15;
+      background: radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 70%);
+      animation: pulse 10s infinite alternate;
+    }
+    .branding-section::before {
+      width: 400px;
+      height: 400px;
+      top: -100px;
+      right: -150px;
+    }
+    .branding-section::after {
+      width: 300px;
+      height: 300px;
+      bottom: -80px;
+      left: -100px;
+      animation-delay: -5s;
+    }
+    
+    @keyframes pulse {
+      0% { transform: scale(0.9); }
+      100% { transform: scale(1.1); }
+    }
+    
+    /* Responsive Design */
+    @media (max-width: 900px) {
+      .login-panel { grid-template-columns: 1fr; max-width: 480px; }
+      .branding-section { display: none; /* Жижиг дэлгэцэн дээр нуух */ }
+      .form-section { padding: 32px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-panel">
+    <div class="form-section">
+      <img src="/static/images/unitel-logo.png" alt="Unitel Logo" class="logo">
+      <h1>Тавтай морил!</h1>
+      <p>Unitel AI Hub-д нэвтэрнэ үү.</p>
+
+      <form action="/login" method="POST">
+        <div class="input-group">
+          <span class="icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 18a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+          </span>
+          <input type="text" class="input" placeholder="Утасны дугаар" required>
+        </div>
+
+        <div class="input-group">
+          <span class="icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+          </span>
+          <input type="password" class="input" id="password" placeholder="Нууц үг" required>
+          <button type="button" class="password-toggle" id="togglePassword" aria-label="Нууц үг харах">
+            <svg id="eye-icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          </button>
+        </div>
+
+        <div class="actions">
+          <label>
+            <input type="checkbox" name="remember">
+            <span>Намайг сана</span>
+          </label>
+          <a href="#">Нууц үгээ мартсан?</a>
+        </div>
+
+        <button type="submit" class="btn-login">Нэвтрэх</button>
+      </form>
+    </div>
+
+    <div class="branding-section">
+      <h2>Өгөгдөлд суурилсан шийдвэр.</h2>
+      <p>AI туслахын тусламжтайгаар маркетингийн үйл ажиллагаагаа хялбарчилж, үр дүнгээ хэмжинэ үү.</p>
+    </div>
+  </div>
+
+  <script>
+    const togglePassword = document.getElementById('togglePassword');
+    const passwordInput = document.getElementById('password');
+    const eyeIcon = document.getElementById('eye-icon');
+    
+    const eyeIconSVG = `<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>`;
+    const eyeOffIconSVG = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>`;
+
+    togglePassword.addEventListener('click', function () {
+      const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+      passwordInput.setAttribute('type', type);
+      
+      // Icon солих
+      if (type === 'password') {
+        eyeIcon.innerHTML = eyeIconSVG;
+      } else {
+        eyeIcon.innerHTML = eyeOffIconSVG;
+      }
+    });
+  </script>
+
+</body>
+</html>

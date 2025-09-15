@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unitel Ads Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--green:#00b140;--blue:#2563eb;--sky:#0ea5e9;--ink:#1e293b;--muted:#64748b;--bg:#f8fafc;--card:#fff;--border:#e5e7eb}
+    *{box-sizing:border-box} body{margin:0;font-family:'Montserrat',sans-serif;background:var(--bg);color:var(--ink)}
+    .wrap{max-width:1200px;margin:0 auto;padding:24px}
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+    h1{font-size:26px;margin:0}
+    .btn{display:inline-flex;align-items:center;gap:8px;border:none;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
+    .btn.primary{background:var(--green);color:#fff}
+    .btn.outline{background:#fff;color:var(--blue);border:1px solid var(--blue)}
+    .btn.link{background:#fff;color:var(--sky);border:1px solid var(--sky)}
+    .controls{display:flex;gap:10px;align-items:center;margin:12px 0}
+    input[type=number]{width:80px;padding:8px 10px;border:1px solid var(--border);border-radius:8px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:12px 14px;border-bottom:1px solid var(--border);white-space:nowrap;text-align:left}
+    thead{background:#f1f5f9}
+    th{font-size:12px;text-transform:uppercase;color:#64748b}
+    .status{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}
+    .active{background:#dcfce7;color:#166534}.inactive{background:#f1f5f9;color:#475569}
+    a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
+    .thumb{height:34px;width:60px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
+    .muted{color:var(--muted)}
+    .empty{padding:60px;text-align:center;color:var(--muted)}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Ads Dashboard</h1>
+      <div>
+        <a class="btn link" href="/report/ads.tsv">TSV татах</a>
+        <a class="btn outline" href="/report/ads.xlsx">XLSX татах</a>
+        <button id="scrape" class="btn primary">Шинэчлэх (Scrape Now)</button>
+      </div>
+    </header>
+
+    <div class="controls">
+      <span>Сүүлийн</span>
+      <input id="days" type="number" value="30" min="1"/>
+      <span>хоног</span>
+      <button id="reload" class="btn outline">Дахин ачаалах</button>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Зураг</th>
+            <th>Brand</th>
+            <th>Сурталчилгаа</th>
+            <th>Сайт</th>
+            <th>Эхэлсэн</th>
+            <th>Сүүлд</th>
+            <th>Тоолол</th>
+            <th>Төлөв</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="8" class="empty">⏳ Уншиж байна…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+<script>
+const $ = s => document.querySelector(s);
+const tbody = $("#tbody");
+const daysEl = $("#days");
+const reloadBtn = $("#reload");
+const scrapeBtn = $("#scrape");
+
+function pill(status){
+  const cls = (status||"").toLowerCase()==="active"?"active":"inactive";
+  const txt = cls==="active"?"Идэвхтэй":"Идэвхгүй";
+  return `<span class="status ${cls}">${txt}</span>`;
+}
+
+function rowHtml(r){
+  const shot = r.screenshot ? `<img class="thumb" src="${r.screenshot}" alt="shot">` : "";
+  const brand = r.brand || "—";
+  const adLinks = [
+    r.src_open ? `<a href="${r.src_open}" target="_blank" rel="noopener">Зураг</a>` : "",
+    r.landing_open ? `<a href="${r.landing_open}" target="_blank" rel="noopener">Сурталчилгаа</a>` : "",
+  ].filter(Boolean).join(" / ") || "—";
+  const site = r.site_home ? `<a href="${r.site_home}" target="_blank" rel="noopener">${r.site}</a>` : (r.site || "—");
+  const first = r.first_seen_ts || r.first_seen_date || "—";
+  const last  = r.last_seen_ts  || r.last_seen_date  || "—";
+  const cnt = `${r.days_seen || "1"} өдөр / ${r.times_seen || "1"} удаа`;
+  return `<tr>
+    <td>${shot}</td>
+    <td><strong>${brand}</strong></td>
+    <td>${adLinks}</td>
+    <td>${site}</td>
+    <td>${first}</td>
+    <td>${last}</td>
+    <td>${cnt}</td>
+    <td>${pill(r.status)}</td>
+  </tr>`;
+}
+
+async function load(){
+  const days = Math.max(1, parseInt(daysEl.value||"30",10));
+  tbody.innerHTML = `<tr><td colspan="8" class="empty">⏳ Уншиж байна…</td></tr>`;
+  try{
+    const res = await fetch(`/ads/api/summary?days=${days}`);
+    const data = await res.json();
+    const items = data?.items || [];
+    tbody.innerHTML = items.length ? items.map(rowHtml).join("") :
+      `<tr><td colspan="8" class="empty">Мэдээлэл алга.</td></tr>`;
+  }catch(e){
+    console.error(e);
+    tbody.innerHTML = `<tr><td colspan="8" class="empty">💥 Алдаа гарлаа.</td></tr>`;
+  }
+}
+
+reloadBtn.addEventListener("click", load);
+scrapeBtn.addEventListener("click", async ()=>{
+  scrapeBtn.disabled = true; scrapeBtn.textContent = "Ажиллаж байна…";
+  try{ await fetch("/admin/scrape-now", {method:"POST"}); }
+  catch(e){ console.error(e); }
+  finally{ scrapeBtn.disabled = false; scrapeBtn.textContent = "Шинэчлэх (Scrape Now)"; }
+  // background-д явдаг тул шууд дахин ачаалж болно
+  load();
+});
+
+document.addEventListener("DOMContentLoaded", load);
+</script>
+</body>
+</html>
