@@ -1,136 +1,190 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="mn">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Unitel Ads Dashboard</title>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unitel Ads Admin</title>
   <style>
-    :root{--green:#00b140;--blue:#2563eb;--sky:#0ea5e9;--ink:#1e293b;--muted:#64748b;--bg:#f8fafc;--card:#fff;--border:#e5e7eb}
-    *{box-sizing:border-box} body{margin:0;font-family:'Montserrat',sans-serif;background:var(--bg);color:var(--ink)}
-    .wrap{max-width:1200px;margin:0 auto;padding:24px}
-    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-    h1{font-size:26px;margin:0}
-    .btn{display:inline-flex;align-items:center;gap:8px;border:none;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
-    .btn.primary{background:var(--green);color:#fff}
-    .btn.outline{background:#fff;color:var(--blue);border:1px solid var(--blue)}
-    .btn.link{background:#fff;color:var(--sky);border:1px solid var(--sky)}
-    .controls{display:flex;gap:10px;align-items:center;margin:12px 0}
-    input[type=number]{width:80px;padding:8px 10px;border:1px solid var(--border);border-radius:8px}
-    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:12px 14px;border-bottom:1px solid var(--border);white-space:nowrap;text-align:left}
-    thead{background:#f1f5f9}
-    th{font-size:12px;text-transform:uppercase;color:#64748b}
-    .status{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700}
-    .active{background:#dcfce7;color:#166534}.inactive{background:#f1f5f9;color:#475569}
-    a{color:var(--blue);text-decoration:none} a:hover{text-decoration:underline}
-    .thumb{height:34px;width:60px;object-fit:cover;border-radius:6px;border:1px solid var(--border)}
-    .muted{color:var(--muted)}
-    .empty{padding:60px;text-align:center;color:var(--muted)}
+    body { margin: 0; font-family: 'Segoe UI', Tahoma, sans-serif; background: #f8fafc; color: #0f172a; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    .hero { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
+    .hero h1 { margin: 0; font-size: 26px; }
+    .muted { color: #64748b; margin: 4px 0 0; font-size: 14px; }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: flex-end; }
+    .controls { display: flex; align-items: center; gap: 12px; margin: 18px 0; flex-wrap: wrap; }
+    .controls label { font-weight: 600; }
+    .controls input { width: 90px; padding: 8px 10px; border-radius: 6px; border: 1px solid #cbd5f5; font-size: 14px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 16px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; font-weight: 600; font-size: 14px; text-decoration: none; }
+    .btn.primary { background: #0f766e; color: #fff; }
+    .btn.light { background: #fff; border-color: #cbd5f5; color: #0f172a; }
+    .btn.ghost { background: #fff; border-color: #cbd5f5; color: #0f172a; }
+    .btn:disabled { opacity: 0.6; cursor: wait; }
+    .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; overflow-x: auto; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05); }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    th, td { padding: 12px 14px; border-bottom: 1px solid #e2e8f0; text-align: left; font-size: 14px; }
+    th { background: #f1f5f9; text-transform: uppercase; letter-spacing: 0.04em; font-size: 12px; color: #64748b; }
+    .thumb { width: 80px; height: 48px; object-fit: cover; border-radius: 6px; border: 1px solid #e2e8f0; }
+    .message { text-align: center; color: #64748b; padding: 28px 12px; font-size: 15px; }
+    .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-weight: 600; font-size: 12px; }
+    .badge-active { background: #dcfce7; color: #166534; }
+    .badge-inactive { background: #f8fafc; color: #64748b; border: 1px solid #cbd5f5; }
+    a { color: #2563eb; }
+    a:hover { text-decoration: underline; }
+    @media (max-width: 768px) {
+      .hero { flex-direction: column; align-items: flex-start; }
+      .actions { justify-content: flex-start; }
+      table { min-width: 100%; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Ads Dashboard</h1>
+  <div class="container">
+    <header class="hero">
       <div>
-        <a class="btn link" href="/report/ads.tsv">TSV татах</a>
-        <a class="btn outline" href="/report/ads.xlsx">XLSX татах</a>
-        <button id="scrape" class="btn primary">Шинэчлэх (Scrape Now)</button>
+        <h1>Зарын хяналтын самбар</h1>
+        <p class="muted">/ads/api/summary мэдээлэл дээр тулгуурлан автоматаар шинэчлэгдэнэ.</p>
+      </div>
+      <div class="actions">
+        <button id="scrape-now" class="btn primary">Шинэчлэх (Scrape Now)</button>
+        <a id="download-tsv" class="btn light" href="/report/ads.tsv">TSV татах</a>
+        <a id="download-xlsx" class="btn light" href="/report/ads.xlsx">XLSX татах</a>
       </div>
     </header>
 
-    <div class="controls">
-      <span>Сүүлийн</span>
-      <input id="days" type="number" value="30" min="1"/>
-      <span>хоног</span>
-      <button id="reload" class="btn outline">Дахин ачаалах</button>
-    </div>
+    <section class="controls">
+      <label for="days">Хамрах өдөр:</label>
+      <input id="days" type="number" min="1" max="365" value="30">
+      <button id="refresh" class="btn ghost" type="button">Дахин ачаалах</button>
+    </section>
 
-    <div class="card">
+    <section class="card">
       <table>
         <thead>
           <tr>
             <th>Зураг</th>
             <th>Brand</th>
-            <th>Сурталчилгаа</th>
+            <th>Landing</th>
             <th>Сайт</th>
             <th>Эхэлсэн</th>
             <th>Сүүлд</th>
-            <th>Тоолол</th>
+            <th>Тоо</th>
             <th>Төлөв</th>
           </tr>
         </thead>
-        <tbody id="tbody">
-          <tr><td colspan="8" class="empty">⏳ Уншиж байна…</td></tr>
+        <tbody id="data-body">
+          <tr><td colspan="8" class="message">Өгөгдөл дуудаж байна...</td></tr>
         </tbody>
       </table>
-    </div>
+    </section>
   </div>
 
 <script>
-const $ = s => document.querySelector(s);
-const tbody = $("#tbody");
-const daysEl = $("#days");
-const reloadBtn = $("#reload");
-const scrapeBtn = $("#scrape");
+(() => {
+  const state = {
+    days: 30,
+    loading: false
+  };
 
-function pill(status){
-  const cls = (status||"").toLowerCase()==="active"?"active":"inactive";
-  const txt = cls==="active"?"Идэвхтэй":"Идэвхгүй";
-  return `<span class="status ${cls}">${txt}</span>`;
-}
+  const tbody = document.getElementById('data-body');
+  const daysInput = document.getElementById('days');
+  const scrapeBtn = document.getElementById('scrape-now');
+  const refreshBtn = document.getElementById('refresh');
+  const tsvLink = document.getElementById('download-tsv');
+  const xlsxLink = document.getElementById('download-xlsx');
 
-function rowHtml(r){
-  const shot = r.screenshot ? `<img class="thumb" src="${r.screenshot}" alt="shot">` : "";
-  const brand = r.brand || "—";
-  const adLinks = [
-    r.src_open ? `<a href="${r.src_open}" target="_blank" rel="noopener">Зураг</a>` : "",
-    r.landing_open ? `<a href="${r.landing_open}" target="_blank" rel="noopener">Сурталчилгаа</a>` : "",
-  ].filter(Boolean).join(" / ") || "—";
-  const site = r.site_home ? `<a href="${r.site_home}" target="_blank" rel="noopener">${r.site}</a>` : (r.site || "—");
-  const first = r.first_seen_ts || r.first_seen_date || "—";
-  const last  = r.last_seen_ts  || r.last_seen_date  || "—";
-  const cnt = `${r.days_seen || "1"} өдөр / ${r.times_seen || "1"} удаа`;
-  return `<tr>
-    <td>${shot}</td>
-    <td><strong>${brand}</strong></td>
-    <td>${adLinks}</td>
-    <td>${site}</td>
-    <td>${first}</td>
-    <td>${last}</td>
-    <td>${cnt}</td>
-    <td>${pill(r.status)}</td>
-  </tr>`;
-}
+  const todayIso = () => new Date().toISOString().slice(0, 10);
 
-async function load(){
-  const days = Math.max(1, parseInt(daysEl.value||"30",10));
-  tbody.innerHTML = `<tr><td colspan="8" class="empty">⏳ Уншиж байна…</td></tr>`;
-  try{
-    const res = await fetch(`/ads/api/summary?days=${days}`);
-    const data = await res.json();
-    const items = data?.items || [];
-    tbody.innerHTML = items.length ? items.map(rowHtml).join("") :
-      `<tr><td colspan="8" class="empty">Мэдээлэл алга.</td></tr>`;
-  }catch(e){
-    console.error(e);
-    tbody.innerHTML = `<tr><td colspan="8" class="empty">💥 Алдаа гарлаа.</td></tr>`;
-  }
-}
+  const setMessage = (message) => {
+    tbody.innerHTML = `<tr><td colspan="8" class="message">${message}</td></tr>`;
+  };
 
-reloadBtn.addEventListener("click", load);
-scrapeBtn.addEventListener("click", async ()=>{
-  scrapeBtn.disabled = true; scrapeBtn.textContent = "Ажиллаж байна…";
-  try{ await fetch("/admin/scrape-now", {method:"POST"}); }
-  catch(e){ console.error(e); }
-  finally{ scrapeBtn.disabled = false; scrapeBtn.textContent = "Шинэчлэх (Scrape Now)"; }
-  // background-д явдаг тул шууд дахин ачаалж болно
-  load();
-});
+  const renderStatus = (row) => {
+    const active = row.last_seen_date === todayIso();
+    const status = active ? 'Идэвхтэй' : 'Идэвхгүй';
+    const cls = active ? 'badge badge-active' : 'badge badge-inactive';
+    return `<span class="${cls}">${status}</span>`;
+  };
 
-document.addEventListener("DOMContentLoaded", load);
+  const renderRow = (row) => {
+    const screenshot = row.screenshot ? `<img src="${row.screenshot}" alt="screenshot" class="thumb">` : '—';
+    const brand = row.brand || '—';
+    const landing = row.landing_open ? `<a href="${row.landing_open}" target="_blank" rel="noopener">${row.landing_open}</a>` : '—';
+    const site = row.site || '—';
+    const firstSeen = row.first_seen_date || '—';
+    const lastSeen = row.last_seen_date || '—';
+    const counts = `${row.days_seen} өдөр / ${row.times_seen} удаа`;
+    return `<tr>
+      <td>${screenshot}</td>
+      <td>${brand}</td>
+      <td>${landing}</td>
+      <td>${site}</td>
+      <td>${firstSeen}</td>
+      <td>${lastSeen}</td>
+      <td>${counts}</td>
+      <td>${renderStatus(row)}</td>
+    </tr>`;
+  };
+
+  const updateDownloadLinks = () => {
+    const qs = `?days=${state.days}`;
+    tsvLink.href = `/report/ads.tsv${qs}`;
+    xlsxLink.href = `/report/ads.xlsx${qs}`;
+  };
+
+  const loadSummary = async () => {
+    const days = parseInt(daysInput.value, 10);
+    state.days = Number.isFinite(days) && days > 0 ? Math.min(days, 365) : 30;
+    daysInput.value = state.days;
+    updateDownloadLinks();
+    state.loading = true;
+    setMessage('Өгөгдөл дуудаж байна...');
+    try {
+      const res = await fetch(`/ads/api/summary?days=${state.days}`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      const rows = (data && data.items) || [];
+      if (!rows.length) {
+        setMessage('Харагдах зар одоогоор алга.');
+        return;
+      }
+      tbody.innerHTML = rows.map(renderRow).join('');
+    } catch (err) {
+      console.error('Failed to load summary', err);
+      setMessage('Алдаа гарлаа. Дахин оролдоно уу.');
+    } finally {
+      state.loading = false;
+    }
+  };
+
+  const triggerScrape = async () => {
+    const originalText = scrapeBtn.textContent;
+    scrapeBtn.disabled = true;
+    scrapeBtn.textContent = 'Ажиллаж байна...';
+    try {
+      const res = await fetch('/admin/scrape-now', { method: 'POST' });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      await res.json();
+      await loadSummary();
+    } catch (err) {
+      console.error('Failed to trigger scraper', err);
+      alert('Скрепер эхлүүлэхэд алдаа гарлаа. Логийг шалгана уу.');
+    } finally {
+      scrapeBtn.disabled = false;
+      scrapeBtn.textContent = originalText;
+    }
+  };
+
+  daysInput.addEventListener('change', loadSummary);
+  refreshBtn.addEventListener('click', loadSummary);
+  scrapeBtn.addEventListener('click', triggerScrape);
+
+  updateDownloadLinks();
+  loadSummary();
+})();
 </script>
 </body>
 </html>
