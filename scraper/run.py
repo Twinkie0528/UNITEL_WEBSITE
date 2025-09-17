@@ -1,120 +1,138 @@
-# -*- coding: utf-8 -*-
-# scraper/run.py — scrape gogo/ikon/news → TSV + backend ingest
-import os, traceback, logging, requests
+﻿from __future__ import annotations
+
+import logging
+import os
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional
+
+import requests
 from dotenv import load_dotenv
 
-from common import ensure_dir, load_db, save_db, upsert_banner, BannerRecord
+from common import BannerDeduper, BannerRecord
 from gogo_mn import scrape_gogo
 from ikon_mn import scrape_ikon
 from news_mn import scrape_news
 
 load_dotenv()
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("scraper")
 
-# ---------- Config ----------
-HEADLESS     = True
-DWELL_SEC    = 35
-ADS_ONLY     = True        # (өмнө нь зарлагдаагүй байсан)
-ADS_MIN_SCORE = 2
+HEADLESS = os.getenv("HEADLESS", "1") != "0"
+DEFAULT_DWELL = int(os.getenv("DWELL_DEFAULT", "35"))
+MIN_SCORE = int(os.getenv("AD_MIN_SCORE", "3"))
 
-IKON_DWELL   = 55
-IKON_MIN_SCORE = 1
+SCRAPER_OUTPUT = Path(os.getenv("SCRAPER_SHOT_DIR", "banner_screenshots"))
+DATE_DIR = SCRAPER_OUTPUT / datetime.utcnow().strftime("%Y-%m-%d")
+DATE_DIR.mkdir(parents=True, exist_ok=True)
 
-OUT_DIR  = os.path.abspath("./banner_screenshots")
-TSV_PATH = os.path.abspath("./banner_tracking_combined.tsv")
-
-# Backend ingest endpoints
-INGEST_BASE  = os.getenv("INGEST_BASE", "http://127.0.0.1:8888").rstrip("/")
-API_URL      = os.getenv("API_URL", f"{INGEST_BASE}/ads/api/ingest")
-UPLOAD_URL   = f"{INGEST_BASE}/ads/api/upload"
+INGEST_BASE = os.getenv("INGEST_BASE", "http://127.0.0.1:8888").rstrip("/")
 INGEST_TOKEN = os.getenv("INGEST_TOKEN", "")
+UPLOAD_URL = f"{INGEST_BASE}/ads/api/upload"
+INGEST_URL = f"{INGEST_BASE}/ads/api/ingest"
 
-HEADERS_JSON = {"Content-Type": "application/json", **({"X-INGEST-TOKEN": INGEST_TOKEN} if INGEST_TOKEN else {})}
-HEADERS_FORM = ({"X-INGEST-TOKEN": INGEST_TOKEN} if INGEST_TOKEN else {})
+session = requests.Session()
+headers = {"User-Agent": "UnitelScraper/1.0"}
+if INGEST_TOKEN:
+    headers["X-INGEST-TOKEN"] = INGEST_TOKEN
+json_headers = {**headers, "Content-Type": "application/json"}
 
-# ---------- Helpers ----------
-def _upload_screenshot(local_path: str) -> str | None:
-    """/ads/api/upload руу screenshot илгээнэ → /static/... URL буцаана."""
-    try:
-        if not local_path or not os.path.exists(local_path):
-            return None
-        with open(local_path, "rb") as f:
-            files = {"file": (os.path.basename(local_path), f, "image/png")}
-            r = requests.post(UPLOAD_URL, files=files, headers=HEADERS_FORM, timeout=30)
-            r.raise_for_status()
-            return (r.json() or {}).get("url")
-    except Exception as e:
-        logging.error("upload fail: %s", e)
-        return None
-
-def send_to_ingest_api(record: BannerRecord, shot_url: str | None):
-    """
-    Flask backend /ads/api/ingest руу илгээнэ.
-    app.py тал 'url' (landing) талбарыг ашигладаг тул landing_open биш 'url' илгээнэ.
-    """
-    if record.is_ad != "1":
-        return
-    payload = {
-        "ad_id": record.ad_id,
-        "site": record.site,
-        "status": "active",
-        "url": record.landing_url,    # !!! brand-д хэрэгтэй
-        "src_open": record.src,
-        "screenshot": (shot_url or "")
-    }
-    try:
-        resp = requests.post(API_URL, headers=HEADERS_JSON, json=payload, timeout=30)
-        resp.raise_for_status()
-        logging.info("ingest ok: %s | %s", record.site, record.ad_id)
-    except requests.exceptions.RequestException as e:
-        logging.error("ingest fail: %s | %s", record.site, e)
-
-# ---------- Main ----------
-date_dir = os.path.join(OUT_DIR, datetime.now().strftime("%Y-%m-%d"))
-ensure_dir(date_dir)
-logging.info("🚀 Scan start → %s", date_dir)
-
-sites = [
-    ("gogo", scrape_gogo, DWELL_SEC, ADS_MIN_SCORE),
-    ("ikon", scrape_ikon, IKON_DWELL, IKON_MIN_SCORE),
-    ("news", scrape_news, DWELL_SEC, ADS_MIN_SCORE),
+SiteScraper = Callable[[Path, int, bool], List[Dict[str, Any]]]
+SITES: List[Dict[str, Any]] = [
+    {
+        "name": "gogo.mn",
+        "fn": scrape_gogo,
+        "dwell": int(os.getenv("DWELL_GOGO", str(DEFAULT_DWELL))),
+        "min_score": int(os.getenv("MIN_SCORE_GOGO", str(MIN_SCORE))),
+    },
+    {
+        "name": "ikon.mn",
+        "fn": scrape_ikon,
+        "dwell": int(os.getenv("DWELL_IKON", "55")),
+        "min_score": int(os.getenv("MIN_SCORE_IKON", str(max(1, MIN_SCORE - 1)))),
+    },
+    {
+        "name": "news.mn",
+        "fn": scrape_news,
+        "dwell": int(os.getenv("DWELL_NEWS", str(DEFAULT_DWELL))),
+        "min_score": int(os.getenv("MIN_SCORE_NEWS", str(MIN_SCORE))),
+    },
 ]
 
-rows = load_db(TSV_PATH)
 
-for name, fn, dwell, min_score in sites:
+def upload_screenshot(path: Optional[str]) -> Optional[str]:
+    if not path:
+        return None
+    file_path = Path(path)
+    if not file_path.exists():
+        return None
+    with file_path.open("rb") as fh:
+        files = {"file": (file_path.name, fh, "image/png")}
+        try:
+            resp = session.post(UPLOAD_URL, files=files, headers=headers, timeout=60)
+            resp.raise_for_status()
+            data = resp.json()
+            return data.get("url")
+        except Exception as exc:
+            logger.error("upload failed for %s: %s", file_path, exc)
+            return None
+
+
+def send_ingest(record: BannerRecord, screenshot_url: Optional[str]) -> bool:
+    payload = record.as_ingest_payload(screenshot_url)
     try:
-        caps = fn(
-            date_dir,
-            dwell_seconds=dwell,
-            headless=HEADLESS,
-            ads_only=ADS_ONLY,
-            min_score=min_score,
-        )
-        logging.info("🔎 %s: %d candidates", name, len(caps))
+        resp = session.post(INGEST_URL, json=payload, headers=json_headers, timeout=60)
+        resp.raise_for_status()
+        return True
+    except Exception as exc:
+        logger.error("ingest failed for %s (%s): %s", record.site, record.ad_id, exc)
+        return False
 
-        for cap in caps:
-            rec = BannerRecord.from_capture(cap, min_ad_score=min_score)
-            changed, inserted = upsert_banner(rows, rec)
-            if inserted:
-                logging.info("[NEW] %s → %s | is_ad:%s score:%s",
-                             rec.site, rec.src or rec.screenshot_path, rec.is_ad, rec.ad_score)
 
-            # upload screenshot (optional)
-            shot_url = _upload_screenshot(rec.screenshot_path) if rec.screenshot_path else None
-            # push to backend
-            send_to_ingest_api(rec, shot_url)
+def main() -> int:
+    deduper = BannerDeduper(distance_threshold=5)
+    total_sent = 0
+    for site in SITES:
+        name = str(site["name"])
+        scraper: SiteScraper = site["fn"]  # type: ignore[assignment]
+        dwell = int(site["dwell"])
+        min_score = int(site["min_score"])
 
-            # not inserted бол локал скриншотыг устгаж болно (хэмнэлт)
-            if not inserted and rec.screenshot_path and os.path.exists(rec.screenshot_path):
-                try: os.remove(rec.screenshot_path)
-                except Exception: pass
+        logger.info("Scraping %s (dwell=%ss, min_score=%s)", name, dwell, min_score)
+        try:
+            captures = scraper(DATE_DIR, dwell_seconds=dwell, headless=HEADLESS)
+        except Exception as exc:
+            logger.exception("scrape failed for %s: %s", name, exc)
+            continue
 
-    except Exception as e:
-        logging.error("FATAL %s: %s", name, e)
-        traceback.print_exc()
+        logger.info("%s returned %d candidates", name, len(captures))
+        sent_site = 0
+        for capture in captures:
+            record = BannerRecord.from_capture(capture, min_score=min_score)
+            if record is None:
+                continue
+            if record.is_ad != "1":
+                logger.debug("skip %s score=%s (%s)", record.src, record.score, record.reason)
+                continue
+            if not deduper.add(record):
+                logger.debug("dedupe filtered %s", record.src)
+                continue
+            screenshot_url = upload_screenshot(record.screenshot_path)
+            if send_ingest(record, screenshot_url):
+                sent_site += 1
+                total_sent += 1
+                logger.info(
+                    "INGEST %s | %s | score=%s | %s",
+                    record.site,
+                    record.ad_id,
+                    record.score,
+                    record.reason,
+                )
+        logger.info("%s: sent %d new ads", name, sent_site)
+    logger.info("Scraper completed. total_ads=%d", total_sent)
+    return 0
 
-save_db(TSV_PATH, rows)
-logging.info("💾 TSV saved: %s (rows=%d)", TSV_PATH, len(rows))
-logging.info("✅ Done.")
+
+if __name__ == "__main__":
+    raise SystemExit(main())
