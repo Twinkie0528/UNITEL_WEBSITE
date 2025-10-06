@@ -35,6 +35,7 @@ ROOT_DIR = Path(__file__).resolve().parent
 TEMPLATES_DIR = ROOT_DIR / "templates"
 STATIC_DIR = ROOT_DIR / "static"
 SCRAPER_DIR = ROOT_DIR / "scraper"
+SCRAPER_EXPORT_DIR = SCRAPER_DIR / "_export"
 BANNER_SCREENSHOT_DIR = SCRAPER_DIR / "banner_screenshots"
 UPLOAD_ROOT = STATIC_DIR / "ads"
 
@@ -527,31 +528,43 @@ def api_ingest() -> Any:
 
 @app.get("/report/ads.tsv")
 def report_ads_tsv() -> Any:
-    days = parse_days_arg(request.args.get("days"), default=30)
-    try:
-        rows = aggregate_ads(days)
-    except PyMongoError:
-        return jsonify({"ok": False, "error": "database_error"}), 500
-    stream = build_tsv(rows)
-    filename = f"ads_{utc_now().date().isoformat()}_{days}d.tsv"
+    # Serve the scraper export directly from disk
+    target = SCRAPER_EXPORT_DIR / "ads.tsv"
+    if not target.exists():
+        return jsonify({"ok": False, "error": "missing_export", "path": str(target)}), 404
     return send_file(
-        stream,
+        str(target),
         as_attachment=True,
-        download_name=filename,
+        download_name="ads.tsv",
         mimetype="text/tab-separated-values; charset=utf-8",
     )
 
 
 @app.get("/report/ads.xlsx")
 def report_ads_xlsx() -> Any:
-    days = parse_days_arg(request.args.get("days"), default=30)
-    try:
-        rows = aggregate_ads(days)
-    except PyMongoError:
-        return jsonify({"ok": False, "error": "database_error"}), 500
-    stream, mimetype, suffix = build_xlsx(rows)
-    filename = f"ads_{utc_now().date().isoformat()}_{days}d{suffix}"
-    return send_file(stream, as_attachment=True, download_name=filename, mimetype=mimetype)
+    # Serve the scraper export directly from disk
+    target = SCRAPER_EXPORT_DIR / "ads.xlsx"
+    if not target.exists():
+        return jsonify({"ok": False, "error": "missing_export", "path": str(target)}), 404
+    return send_file(str(target), as_attachment=True, download_name="ads.xlsx")
+
+
+@app.get("/admin/scraper")
+def admin_scraper() -> Any:
+    # Simple admin page listing current TSV rows
+    tsv_path = SCRAPER_EXPORT_DIR / "ads.tsv"
+    rows: List[Dict[str, str]] = []
+    if tsv_path.exists():
+        try:
+            with tsv_path.open("r", encoding="utf-8") as fh:
+                reader = csv.DictReader(fh, delimiter="\t")
+                for r in reader:
+                    rows.append(r)
+        except Exception as exc:
+            logging.warning("Failed to read TSV %s: %s", tsv_path, exc)
+    else:
+        logging.info("TSV not found at %s", tsv_path)
+    return render_template("admin_scraper.html", rows=rows, tsv_exists=tsv_path.exists())
 
 
 @app.get("/tools/reset")

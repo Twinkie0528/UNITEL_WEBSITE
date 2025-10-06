@@ -20,5 +20,24 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Logs
+
+# .gitignore
+# Secrets & keys
+.env
+Server-key/
+
+# Local DB / generated data
+bookings.db
+
+# Scraper outputs / heavy assets
+scraper/_export/
+scraper/banner_screenshots/
+scraper/banner_tracking_combined.tsv
+static/ads/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Flask/other logs
 *.log
