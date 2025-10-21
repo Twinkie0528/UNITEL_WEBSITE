@@ -1,0 +1,420 @@
+﻿<!DOCTYPE html>
+<html lang="mn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unitel • Админ Систем</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --unitel-green: #17b169;
+            --unitel-green-dark: #129157;
+            --bg-light: #f8f9fa;
+            --bg-dark-panel: #1a202c;
+            --text-dark: #212529;
+            --text-light: #f1f5f9;
+            --text-muted: #6c757d;
+            --border-color: #dee2e6;
+            --error-color: #dc3545;
+            --success-color: #198754;
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.07);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--bg-light);
+        }
+
+        .login-container {
+            width: min(1000px, 95vw);
+            height: 600px;
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            background: #fff;
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeIn 0.6s 0.2s ease-out forwards;
+        }
+
+        @keyframes fadeIn {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Form Container (Left) */
+        .form-container {
+            padding: 50px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .logo {
+            width: 80px; /* Иконы хэмжээг тохируулав */
+            height: 80px;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            color: var(--text-muted);
+            margin-bottom: 40px;
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 24px;
+        }
+
+        .input-field {
+            width: 100%;
+            border: none;
+            border-bottom: 2px solid var(--border-color);
+            padding: 10px 0;
+            font-size: 16px;
+            background: transparent;
+            color: var(--text-dark);
+            transition: border-color 0.3s;
+        }
+
+        .input-field:focus {
+            outline: none;
+            border-bottom-color: var(--unitel-green);
+        }
+
+        .input-label {
+            position: absolute;
+            top: 10px;
+            left: 0;
+            color: var(--text-muted);
+            pointer-events: none;
+            transition: all 0.3s ease;
+        }
+
+        .input-field:focus + .input-label,
+        .input-field:not(:placeholder-shown) + .input-label {
+            top: -12px;
+            font-size: 12px;
+            color: var(--unitel-green);
+        }
+
+        .submit-btn {
+            width: 100%;
+            height: 50px;
+            border-radius: 12px;
+            border: none;
+            background-color: var(--unitel-green);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .submit-btn:hover {
+            background-color: var(--unitel-green-dark);
+            box-shadow: 0 4px 15px rgba(23, 177, 105, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .security-note {
+            text-align: center;
+            margin-top: auto;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Error and Success States */
+        .form-container.error .input-field {
+            border-bottom-color: var(--error-color);
+        }
+        .form-container.error .input-field:focus + .input-label,
+        .form-container.error .input-field:not(:placeholder-shown) + .input-label {
+             color: var(--error-color);
+        }
+        .form-container.error {
+            animation: shake 0.4s;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+            20%, 40%, 60%, 80% { transform: translateX(5px); }
+        }
+
+        .error-message {
+            color: var(--error-color);
+            font-size: 13px;
+            text-align: center;
+            height: 20px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .form-container.error .error-message {
+            opacity: 1;
+        }
+        
+        .submit-btn.success {
+            width: 50px; /* Animate to circle */
+            background-color: var(--success-color);
+            pointer-events: none;
+        }
+        .submit-btn .icon, .submit-btn .text {
+            transition: all 0.3s ease;
+        }
+        .submit-btn.success .text {
+             opacity: 0;
+             transform: scale(0.5);
+        }
+        .submit-btn .icon {
+            position: absolute;
+            opacity: 0;
+            transform: scale(0.5);
+        }
+        .submit-btn.success .icon {
+            opacity: 1;
+            transform: scale(1);
+        }
+        .form-container.success .input-group,
+        .form-container.success .header {
+            transition: opacity 0.3s;
+            opacity: 0;
+        }
+
+        /* Visual Container (Right) */
+        .visual-container {
+            background: linear-gradient(160deg, #1a202c, #2d3748);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            color: var(--text-light);
+            padding: 50px;
+        }
+
+        #network-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0.5;
+        }
+
+        .visual-content {
+            z-index: 1;
+        }
+
+        .visual-content h2 {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .visual-content p {
+            font-size: 16px;
+            opacity: 0.8;
+            max-width: 350px;
+        }
+
+        @media (max-width: 900px) {
+            .login-container {
+                grid-template-columns: 1fr;
+                width: min(450px, 90vw);
+                height: auto;
+            }
+            .visual-container {
+                display: none;
+            }
+            .form-container {
+                padding: 40px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <main class="login-container">
+        <section class="form-container" id="formContainer">
+            <img src="/static/images/unitel-logo.png" alt="Unitel Logo" class="logo">
+
+            <header class="header">
+                <h1>Админ Систем</h1>
+                <p>Нэвтрэх хэсэг</p>
+            </header>
+
+            <form id="loginForm">
+                <div class="input-group">
+                    <input type="email" id="email" class="input-field" placeholder=" " required>
+                    <label for="email" class="input-label">Имэйл хаяг</label>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password" class="input-field" placeholder=" " required>
+                    <label for="password" class="input-label">Нууц үг</label>
+                </div>
+                
+                <div class="error-message" id="errorMessage"></div>
+
+                <button type="submit" class="submit-btn" id="submitBtn">
+                    <span class="text">Нэвтрэх</span>
+                    <svg class="icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>
+            </form>
+            <p class="security-note">Таны нэвтрэлт IP хаягтай бүртгэгдэж байна.</p>
+        </section>
+
+        <section class="visual-container">
+            <canvas id="network-canvas"></canvas>
+            <div class="visual-content">
+                <h2>Нэгдсэн Сүлжээний Удирдлага</h2>
+                <p>Data. Connection. Control.</p>
+            </div>
+        </section>
+    </main>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const formContainer = document.getElementById('formContainer');
+        const loginForm = document.getElementById('loginForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const errorMessage = document.getElementById('errorMessage');
+
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            formContainer.classList.remove('error');
+            errorMessage.textContent = '';
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            submitBtn.disabled = true;
+
+            setTimeout(() => {
+                if (email === 'bolortulga.a@unitel.mn' && password === '80808080') {
+                    // Success
+                    formContainer.classList.add('success');
+                    submitBtn.classList.add('success');
+                    setTimeout(() => {
+                        // Redirect to dashboard
+                        // window.location.href = '/admin/dashboard';
+                        alert('Амжилттай нэвтэрлээ! Dashboard руу шилжиж байна.');
+                    }, 1200);
+                } else {
+                    // Failure
+                    formContainer.classList.add('error');
+                    errorMessage.textContent = 'Имэйл эсвэл нууц үг буруу байна.';
+                    submitBtn.disabled = false;
+                }
+            }, 1000);
+        });
+
+        // Interactive Network Background
+        const canvas = document.getElementById('network-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            let particles = [];
+            const numParticles = 80;
+
+            function resizeCanvas() {
+                canvas.width = canvas.offsetWidth;
+                canvas.height = canvas.offsetHeight;
+            }
+
+            class Particle {
+                constructor() {
+                    this.x = Math.random() * canvas.width;
+                    this.y = Math.random() * canvas.height;
+                    this.vx = (Math.random() - 0.5) * 0.5;
+                    this.vy = (Math.random() - 0.5) * 0.5;
+                    this.radius = 2;
+                }
+
+                update() {
+                    this.x += this.vx;
+                    this.y += this.vy;
+
+                    if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                    if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+                }
+
+                draw() {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.fill();
+                }
+            }
+
+            function init() {
+                resizeCanvas();
+                particles = [];
+                for (let i = 0; i < numParticles; i++) {
+                    particles.push(new Particle());
+                }
+            }
+
+            function connectParticles() {
+                for (let i = 0; i < particles.length; i++) {
+                    for (let j = i + 1; j < particles.length; j++) {
+                        const dx = particles[i].x - particles[j].x;
+                        const dy = particles[i].y - particles[j].y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+
+                        if (distance < 100) {
+                            ctx.beginPath();
+                            ctx.moveTo(particles[i].x, particles[i].y);
+                            ctx.lineTo(particles[j].x, particles[j].y);
+                            ctx.strokeStyle = `rgba(23, 177, 105, ${1 - distance / 100})`;
+                            ctx.lineWidth = 1;
+                            ctx.stroke();
+                        }
+                    }
+                }
+            }
+
+            function animate() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                particles.forEach(p => {
+                    p.update();
+                    p.draw();
+                });
+                connectParticles();
+                requestAnimationFrame(animate);
+            }
+
+            init();
+            animate();
+            window.addEventListener('resize', init);
+        }
+    });
+    </script>
+</body>
+</html>

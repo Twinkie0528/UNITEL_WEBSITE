@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ad Scraper Report</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --primary:#00a859; --primary-2:#008f4b; --txt:#1f2937; --muted:#6b7280;
+      --bg:#f5f7fb; --surf:#fff; --border:#e5e7eb;
+      --ok:#065f46; --okbg:#d1fae5; --warn:#92400e; --warnbg:#fef3c7;
+      --info:#1e40af; --infobg:#dbeafe; --err:#7f1d1d; --errbg:#fee2e2;
+      --shadow:0 10px 20px rgba(0,0,0,.06);
+      --r:14px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; padding:24px;
+      font-family:Montserrat, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color:var(--txt); background:linear-gradient(180deg,#f8fafc 0,#eef2f7 100%);
+    }
+    .container{max-width: 1280px; margin:0 auto}
+    .header{
+      display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;
+      margin-bottom:18px;
+    }
+    h1{margin:0; font-size:28px; letter-spacing:.2px}
+    .actions{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .btn{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:10px 14px; border-radius:12px; border:1px solid var(--border);
+      background:var(--surf); font-weight:700; text-decoration:none; color:var(--txt);
+      box-shadow:0 1px 1px rgba(0,0,0,.02); cursor:pointer;
+    }
+    .btn:hover{background:#f3f4f6}
+    .btn-primary{background:var(--primary); border-color:var(--primary); color:#fff}
+    .btn-primary:hover{background:var(--primary-2)}
+    .btn:disabled{opacity:.6; cursor:not-allowed}
+
+    .banner{
+      border-radius:12px; padding:12px 14px; display:flex; align-items:center; gap:12px; margin:14px 0;
+      border:1px solid; background:var(--surf); box-shadow:var(--shadow);
+    }
+    .b-info{background:var(--infobg); color:var(--info); border-color:#93c5fd}
+    .b-ok{background:var(--okbg); color:var(--ok); border-color:#6ee7b7}
+    .b-err{background:var(--errbg); color:var(--err); border-color:#fca5a5}
+    .dot{width:10px; height:10px; border-radius:50%; background:currentColor; opacity:.75; animation:pulse 1.2s infinite}
+    @keyframes pulse{0%,100%{opacity:.35}50%{opacity:1}}
+
+    .toolbar{
+      display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin:10px 0 6px;
+    }
+    .chips{display:flex; gap:8px; flex-wrap:wrap}
+    .chip{padding:8px 12px; border-radius:999px; background:var(--surf); border:1px solid var(--border); color:var(--muted); font-weight:700; cursor:pointer}
+    .chip.active, .chip:hover{background:#e6f7ec; color:var(--primary); border-color:var(--primary)}
+    .search{
+      display:flex; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; background:var(--surf); min-width:280px;
+    }
+    .search input{border:none; outline:none; font:inherit; width:180px}
+    .hint{font-size:12px; color:var(--muted)}
+
+    .card{border-radius:18px; background:var(--surf); box-shadow:var(--shadow); overflow:hidden; border:1px solid var(--border)}
+    .card h2{margin:0; font-size:18px; padding:14px 16px; border-bottom:1px solid var(--border)}
+    .table-wrap{overflow:auto}
+    table{width:100%; border-collapse:collapse; font-size:14px}
+    thead{background:#f3f4f6}
+    th,td{padding:12px 14px; border-bottom:1px solid var(--border); white-space:nowrap; text-align:left}
+    a{color:var(--primary); font-weight:700; text-decoration:none}
+    a:hover{text-decoration:underline}
+    .badge{padding:4px 10px; border-radius:999px; font-weight:800; font-size:12px}
+    .bg-active{background:var(--okbg); color:var(--ok)}
+    .bg-ended{background:var(--warnbg); color:var(--warn)}
+    .bg-new{background:var(--infobg); color:var(--info)}
+    .shot.seen{color:#9a3412}
+    .muted{color:var(--muted)}
+    .no-data{padding:40px 16px; text-align:center; color:var(--muted); border:2px dashed var(--border); border-radius:18px; margin-top:16px}
+    .hidden{display:none !important}
+
+    /* live log */
+    .log{
+      margin-top:10px; background:#0b1220; color:#d1e4ff; border-radius:12px; border:1px solid #13203a;
+      font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      padding:12px; max-height:280px; overflow:auto; white-space:pre-wrap; box-shadow:var(--shadow);
+    }
+    .log .dim{opacity:.7}
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>Ad Scraper Report</h1>
+    <div class="actions">
+      {% if tsv_exists %}<a class="btn" href="{{ url_for('scraper.download_tsv') }}" title="TSV татах">⬇️ TSV</a>{% endif %}
+      {% if xlsx_exists %}<a class="btn" href="{{ url_for('scraper.download_xlsx') }}" title="XLSX татах">⬇️ XLSX</a>{% endif %}
+      <button id="btnScrape" class="btn btn-primary" type="button">⚡ Scrape Now</button>
+      <button id="btnRefresh" class="btn" type="button" title="Тайланг шинэчлэх">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div id="banner" class="banner b-info">
+    <span id="bdot" class="dot hidden"></span>
+    <div>
+      <div id="btxt">Бэлэн.</div>
+      <div id="bsub" class="hint"></div>
+    </div>
+  </div>
+
+  <!-- Live log while running -->
+  <div id="logWrap" class="log hidden"><span class="dim">Лог харагдах хэсэг…</span></div>
+
+  {% set groups = rows|groupby('site') if rows else [] %}
+  {% if groups %}
+  <div class="toolbar">
+    <div class="chips" id="chips">
+      <div class="chip active" data-site="all">Бүгд</div>
+      {% for g in groups %}<div class="chip" data-site="{{ g.grouper }}">{{ g.grouper }}</div>{% endfor %}
+    </div>
+    <label class="search">
+      🔎
+      <input id="q" type="search" placeholder="Хайх (брэнд, шалтгаан, линк)…"/>
+      <span class="hint">Enter дарж хайна</span>
+    </label>
+  </div>
+  {% endif %}
+
+  {% if rows %}
+    {% for g in groups %}
+    <section class="card site" data-site="{{ g.grouper }}">
+      <h2>{{ g.grouper }}</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+          <tr>
+            <th>Сайт</th>
+            <th>Брэнд</th>
+            <th>Төлөв</th>
+            <th>Анх харагдсан</th>
+            <th>Сүүлд харагдсан</th>
+            <th>Нийт өдөр</th>
+            <th>Нийт удаа</th>
+            <th>Оноо</th>
+            <th>Screenshot</th>
+            <th>Landing URL</th>
+            <th>Шалтгаан</th>
+          </tr>
+          </thead>
+          <tbody>
+          {% for row in g.list %}
+            <tr class="row">
+              <td class="c-site">{{ row.get('site','') }}</td>
+              <td class="c-brand"><strong>{{ row.get('brand','') }}</strong></td>
+              <td class="c-status">
+                {% set st = row.get('status','') %}
+                {% if 'ИДЭВХТЭЙ' in st or 'active' in st|lower %}<span class="badge bg-active">{{ st }}</span>
+                {% elif 'ДУУССАН' in st or 'inactive' in st|lower %}<span class="badge bg-ended">{{ st }}</span>
+                {% else %}<span class="badge bg-new">{{ st or 'Тодорхойгүй' }}</span>{% endif %}
+              </td>
+              <td class="c-first">{{ row.get('first_seen_date','') or '-' }}</td>
+              <td class="c-last">{{ row.get('last_seen_date','') or '-' }}</td>
+              <td class="c-days">{{ row.get('days_seen','') or '-' }}</td>
+              <td class="c-times">{{ row.get('times_seen','') or '-' }}</td>
+              <td class="c-score">{{ row.get('ad_score','') or '-' }}</td>
+              <td class="c-shot">
+                {% set shot = row.get('screenshot_file') %}
+                {% if shot %}<a class="shot" href="{{ shot }}" target="_blank" rel="noopener">Харах</a>{% else %}-{% endif %}
+              </td>
+              <td class="c-landing">
+                {% set land = row.get('landing_url') or row.get('landing_open') %}
+                {% if land and land != '#' %}<a href="{{ land }}" target="_blank" rel="noopener">Линк</a>{% else %}-{% endif %}
+              </td>
+              <td class="c-reason">{{ row.get('ad_reason','') }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% endfor %}
+  {% else %}
+    <div class="no-data">
+      <h3>Дата олдсонгүй</h3>
+      <p>“Scrape Now” товчийг дарж эхлүүлээд, дуусмагц хуудсыг автоматаар шинэчилнэ.</p>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+(function(){
+  const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+  const btn = $("#btnScrape");
+  const btnRefresh = $("#btnRefresh");
+  const banner = $("#banner"), btxt=$("#btxt"), bsub=$("#bsub"), bdot=$("#bdot");
+  const chipsWrap = $("#chips");
+  const searchInput = $("#q");
+  const logWrap = $("#logWrap");
+
+  const SEEN_KEY='scraperSeenLinks';
+  let seenSet = new Set(JSON.parse(localStorage.getItem(SEEN_KEY)||'[]'));
+  let pollTimer=null, timeTimer=null, logTimer=null, startedAt=null;
+
+  function setBanner(kind, text, sub='', dot=false){
+    banner.className = `banner b-${kind}`;
+    btxt.textContent = text;
+    bsub.textContent = sub||'';
+    bdot.classList.toggle('hidden', !dot);
+  }
+  function fmtDuration(ms){
+    const s=Math.floor(ms/1000), m=Math.floor(s/60), r=s%60;
+    return m? `${m}м ${r}с` : `${s}с`;
+  }
+  function tick(){
+    if(!startedAt) return;
+    const el = Date.now()-startedAt;
+    bsub.textContent = `Ажиллаж байна… (${fmtDuration(el)})`;
+  }
+  function startTimers(){
+    startedAt=Date.now();
+    timeTimer=setInterval(tick, 1000);
+    // live log
+    logWrap.classList.remove('hidden');
+    logTimer=setInterval(fetchLog, 1200);
+  }
+  function stopTimers(){
+    startedAt=null;
+    if(timeTimer){clearInterval(timeTimer); timeTimer=null;}
+    if(logTimer){clearInterval(logTimer); logTimer=null;}
+    bsub.textContent='';
+  }
+
+  function applySeen(){
+    $$('.shot').forEach(a=>{
+      const href=a.getAttribute('href'); if(seenSet.has(href)) a.classList.add('seen');
+      a.addEventListener('click',()=>{
+        seenSet.add(href);
+        localStorage.setItem(SEEN_KEY, JSON.stringify([...seenSet]));
+        a.classList.add('seen');
+      });
+    });
+  }
+
+  async function fetchLog(){
+    try{
+      const res = await fetch('/_debug/last-log', {cache:'no-store'});
+      if(!res.ok) return;
+      const txt = await res.text();
+      logWrap.innerHTML = txt;
+      logWrap.scrollTop = logWrap.scrollHeight;
+    }catch(e){}
+  }
+
+  async function postScrape(){
+    try{
+      btn.disabled = true;
+      setBanner('info','Scraper эхлүүлж байна…','',true);
+      const res = await fetch('/scraper/scrape-now', { method:'POST', headers:{'X-Requested-With':'fetch'} });
+      // шууд polling эхлүүлнэ
+      startTimers();
+      pollStatus(true);
+    }catch(e){
+      console.error(e);
+      btn.disabled = false;
+      stopTimers();
+      setBanner('err','Эхлүүлэхэд алдаа гарлаа.','Сервер лог шалгана уу.');
+    }
+  }
+
+  async function pollStatus(force=false){
+    if(pollTimer && !force) return;
+    pollTimer = setInterval(async ()=>{
+      try{
+        const res = await fetch('/scraper/status?ts=' + Date.now(), {cache:'no-store'});
+        if(!res.ok) throw new Error(res.status);
+        const st = await res.json();
+        if(st.running){
+          setBanner('info','Scraper ажиллаж байна…', bsub.textContent || '', true);
+          btn.disabled = true;
+        }else{
+          clearInterval(pollTimer); pollTimer=null; stopTimers();
+          btn.disabled = false;
+          if(st.error){
+            setBanner('err', 'Алдаа: ' + st.error);
+          }else{
+            setBanner('ok','Амжилттай дууслаа! Хуудсыг шинэчилж байна…');
+            setTimeout(()=>location.reload(), 1200);
+          }
+        }
+      }catch(e){
+        console.error('status error', e);
+        clearInterval(pollTimer); pollTimer=null; stopTimers();
+        setBanner('err','Статус авахад алдаа гарлаа.','/_debug/last-log шалгана уу.');
+        btn.disabled=false;
+      }
+    }, 1500);
+  }
+
+  // Filter by site
+  if(chipsWrap){
+    chipsWrap.addEventListener('click',(e)=>{
+      const chip = e.target.closest('.chip'); if(!chip) return;
+      $$('#chips .chip').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      const site = chip.dataset.site;
+      $$('.site').forEach(sec=>{
+        sec.classList.toggle('hidden', site!=='all' && sec.dataset.site!==site);
+      });
+    });
+  }
+
+  // Search within table rows (brand, reason, landing, site)
+  function applySearch(){
+    const q = (searchInput?.value || '').trim().toLowerCase();
+    $$('.site').forEach(sec=>{
+      const rows = sec.querySelectorAll('tbody .row');
+      let visibleCount=0;
+      rows.forEach(r=>{
+        const hay = (
+          (r.querySelector('.c-brand')?.innerText||'') + ' ' +
+          (r.querySelector('.c-reason')?.innerText||'') + ' ' +
+          (r.querySelector('.c-landing')?.innerText||'') + ' ' +
+          (r.querySelector('.c-site')?.innerText||'')
+        ).toLowerCase();
+        const vis = !q || hay.includes(q);
+        r.style.display = vis ? '' : 'none';
+        if(vis) visibleCount++;
+      });
+      sec.classList.toggle('hidden', visibleCount===0);
+    });
+  }
+  if(searchInput){
+    searchInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); applySearch(); } });
+  }
+
+  // init
+  document.addEventListener('DOMContentLoaded', async ()=>{
+    setBanner('info','Бэлэн.');
+    applySeen();
+    // сервер дээр өмнөх ажил байж магадгүй — шууд шалгана
+    try{
+      const res = await fetch('/scraper/status?ts=' + Date.now(), {cache:'no-store'});
+      if(res.ok){
+        const st = await res.json();
+        if(st.running){
+          startTimers();
+          pollStatus(true);
+          setBanner('info','Scraper ажиллаж байна…','',true);
+          btn.disabled = true;
+        }
+      }
+    }catch(e){}
+  });
+
+  btn?.addEventListener('click', ()=>{ if(!btn.disabled) postScrape(); });
+  btnRefresh?.addEventListener('click', ()=>location.reload());
+})();
+</script>
+</body>
+</html>
