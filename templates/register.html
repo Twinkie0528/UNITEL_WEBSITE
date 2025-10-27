@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Unitel AI Hub — Нэвтрэх</title>
+  <title>Unitel AI Hub — Бүртгүүлэх</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -48,8 +48,6 @@
     h1{font-size:28px; margin:0 0 6px}
     .sub{color:var(--muted); margin:0 0 24px}
 
-    .row{display:flex; justify-content:space-between; align-items:center; gap:10px; margin:8px 0 16px}
-
     .input-group{position:relative; margin-bottom:18px}
     .icon{position:absolute; left:16px; top:50%; transform:translateY(-50%); color:#94a3b8}
     .input{
@@ -61,9 +59,6 @@
       position:absolute; right:12px; top:50%; transform:translateY(-50%);
       border:none; background:none; color:var(--muted); cursor:pointer; font-weight:700;
     }
-    label.chk{display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); user-select:none}
-    label.chk input{width:16px; height:16px}
-
     .btn{
       width:100%; padding:16px; border-radius:14px; border:1px solid var(--green);
       background:var(--green); color:#fff; font-weight:800; cursor:pointer;
@@ -72,35 +67,37 @@
     }
     .btn:hover{transform:translateY(-1px); box-shadow:0 14px 22px -10px rgba(0,177,64,.5)}
     .muted{color:var(--muted)}
-    .error,.ok{margin:0 0 14px; padding:10px 12px; border-radius:12px; font-weight:700; font-size:13px}
+    .error,.ok{
+      margin:0 0 14px; padding:10px 12px; border-radius:12px; font-weight:700; font-size:13px
+    }
     .error{background:var(--errbg); color:var(--err); border:1px solid #fecaca}
     .ok{background:var(--okbg); color:var(--ok); border:1px solid #a7f3d0}
+    ul.hints{margin:10px 0 0 0; padding-left:18px; color:var(--muted); font-size:13px}
+    ul.hints li{margin:4px 0}
     .foot{margin-top:14px; font-size:14px}
     a.link{color:var(--green); font-weight:800; text-decoration:none}
     a.link:hover{text-decoration:underline}
-
-    /* Autofill-ийг сааруулахын тулд dummy талбаруудыг харагдахгүй болгоно */
-    .offscreen{position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; opacity:0}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="form-side">
       <img src="/static/images/unitel-logo.png" alt="Unitel" class="logo" />
-      <h1>Unitel AI Hub</h1>
-      <p class="sub">Дотоод систем — нэвтрэх эрх шаардлагатай.</p>
+      <h1>Шинээр бүртгүүлэх</h1>
+      <p class="sub">Зөвхөн дотоод имэйл (@unitel.mn) зөвшөөрөгдөнө.</p>
 
-      {% if info %}<div class="ok">{{ info }}</div>{% endif %}
       {% if ok %}<div class="ok">{{ ok }}</div>{% endif %}
       {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
-      <!-- autocomplete=off + dummy талбарууд -->
-      <form method="POST"
-            action="{{ url_for('login', next=request.args.get('next','')) }}"
-            autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" novalidate>
-        <!-- Dummy username/password (autofill бууруулах) -->
-        <input type="text" class="offscreen" tabindex="-1" aria-hidden="true" autocomplete="username">
-        <input type="password" class="offscreen" tabindex="-1" aria-hidden="true" autocomplete="new-password">
+      <form method="POST" action="{{ url_for('register') }}" novalidate>
+        <div class="input-group">
+          <span class="icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M12 10a2.5 2.5 0 1 0-2.5-2.5A2.5 2.5 0 0 0 12 10Z"/><path d="M7 20a5 5 0 0 1 10 0"/></svg>
+          </span>
+          <input class="input" name="name" placeholder="Нэр" autocomplete="name" required>
+        </div>
 
         <div class="input-group">
           <span class="icon" aria-hidden="true">
@@ -108,9 +105,10 @@
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                  viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M12 10a2.5 2.5 0 1 0-2.5-2.5A2.5 2.5 0 0 0 12 10Z"/><path d="M7 20a5 5 0 0 1 10 0"/></svg>
           </span>
-          <input class="input" id="email" type="email" name="email"
-                 inputmode="email" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
-                 placeholder="Имэйл (name@unitel.mn)" value="{{ email|default('') }}" required>
+          <!-- ALLOW_DOMAIN(optional) -> '@unitel.mn' -->
+          <input class="input" type="email" name="email" autocomplete="email"
+                 placeholder="Дотоод имэйл ({{ (ALLOW_DOMAIN or '@unitel.mn') | default('@unitel.mn') }})"
+                 pattern="^[^@\s]+@unitel\.mn$" required>
         </div>
 
         <div class="input-group">
@@ -119,30 +117,44 @@
                  stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                  viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </span>
-          <input class="input" id="loginPw" type="password" name="password"
-                 autocomplete="off" data-lpignore="true" data-1p-ignore
-                 placeholder="Нууц үг" required>
-          <button type="button" class="toggle" data-target="#loginPw" aria-label="Нууц үг харах">Харах</button>
+          <input class="input" id="regPw1" type="password" name="password"
+                 autocomplete="new-password" placeholder="Нууц үг (дор хаяж 8 тэмдэгт)"
+                 minlength="8" required>
+          <button type="button" class="toggle" data-target="#regPw1" aria-label="Нууц үг харах">Харах</button>
         </div>
 
-        <div class="row">
-          <label class="chk">
-            <input type="checkbox" id="remember" name="remember" value="1">
-            Намайг сана (имэйл хадгална)
-          </label>
+        <div class="input-group">
+          <span class="icon" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                 viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
+          <input class="input" id="regPw2" type="password" name="password2"
+                 autocomplete="new-password" placeholder="Нууц үг (давт)"
+                 minlength="8" required>
+          <button type="button" class="toggle" data-target="#regPw2" aria-label="Нууц үг харах">Харах</button>
         </div>
 
-        <button class="btn" type="submit">Нэвтрэх</button>
+        <ul class="hints">
+          <li>Зөвхөн <strong>{{ (ALLOW_DOMAIN or '@unitel.mn') | default('@unitel.mn') }}</strong> домэйн имэйл зөвшөөрнө.</li>
+          <li>Админ баталгаажуулсны дараа нэвтрэх боломжтой болно.</li>
+        </ul>
+
+        <button class="btn" type="submit">Бүртгэл үүсгэх</button>
+        <p class="muted" style="margin-top:10px">
+          Илгээснээс хойш таны статус <strong>pending</strong> болно. Админ <em>Users</em> самбараас
+          <strong>active</strong> болгосны дараа нэвтэрнэ.
+        </p>
       </form>
 
-      <p class="foot muted">Бүртгэлгүй юу?
-        <a class="link" href="{{ url_for('register', view='register') }}">Шинээр бүртгүүлэх</a>
+      <p class="foot muted">Бүртгэлтэй юу?
+        <a class="link" href="{{ url_for('login') }}">Нэвтрэх</a>
       </p>
     </div>
 
     <div class="brand-side" aria-hidden="true">
-      <h2>Өгөгдөлд суурилсан шийдвэр.</h2>
-      <p>AI туслах + скрепер + аналитик бүхий дотоод платформ. Эрхийн түвшнээр хандалтыг нарийвчлан хянадаг.</p>
+      <h2>Нэгдсэн аюулгүй хандалт.</h2>
+      <p>Дотоод имэйл баталгаажуулалт + админ зөвшөөрөлтэй нэвтрэлт.</p>
     </div>
   </div>
 
@@ -159,36 +171,18 @@
       });
     });
 
-    // "Намайг сана" — зөвхөн имэйл хадгална
-    const em = document.getElementById('email');
-    const pw = document.getElementById('loginPw');
-    const remember = document.getElementById('remember');
+    // Анхны фокус
+    const em = document.querySelector('input[name="name"]');
+    if (em) em.focus();
 
-    // Ачааллахад: зөвхөн сонгосон үед имэйлийг сэргээ
-    (function initRemember(){
-      const r = localStorage.getItem('remember_me') === '1';
-      remember.checked = r;
-      if (r) {
-        const saved = localStorage.getItem('remember_email') || '';
-        if (saved) em.value = saved;
-      } else {
-        // хадгалахгүй бол талбар хоосон байг
-        if (!('{{ email|default("") }}')) em.value = '';
-      }
-      // аюулгүй байдлын үүднээс нууц үгийг үргэлж хоослоно
-      if (pw) pw.value = '';
-      // Анхны фокус
-      if (em) em.focus();
-    })();
-
-    // Form submit: checkbox тэмдэглэсэн бол имэйлийг localStorage-д хадгална
-    document.querySelector('form').addEventListener('submit', ()=>{
-      if (remember.checked) {
-        localStorage.setItem('remember_me', '1');
-        localStorage.setItem('remember_email', em.value.trim());
-      } else {
-        localStorage.removeItem('remember_me');
-        localStorage.removeItem('remember_email');
+    // Клиент талын энгийн баталгаажуулалт: нууц үг давталт
+    const form = document.querySelector('form');
+    form.addEventListener('submit', (e)=>{
+      const p1 = document.getElementById('regPw1').value;
+      const p2 = document.getElementById('regPw2').value;
+      if (p1 !== p2) {
+        e.preventDefault();
+        alert('Нууц үг таарахгүй байна. Дахин шалгана уу.');
       }
     });
   </script>

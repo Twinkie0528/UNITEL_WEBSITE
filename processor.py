@@ -14,6 +14,7 @@ load_dotenv(BASE_DIR / ".env")
 
 # ---------------- Optional local intent model (kept but optional) ----------------
 DISABLE_LOCAL = os.getenv("UNITEL_DISABLE_LOCAL", "1") == "1"  # default: OFF local model
+INTENT_THRESHOLD = float(os.getenv("UNITEL_INTENT_THRESHOLD", "0.72"))
 
 lemmatizer = None
 try:
@@ -53,6 +54,26 @@ def predict_class(sentence, threshold=0.4):
     ranked = [[i, r] for i, r in enumerate(res) if r > threshold]
     ranked.sort(key=lambda x: x[1], reverse=True)
     return [{"intent": classes[i], "p": float(p)} for i, p in ranked]
+
+def intent_reply(user_msg: str) -> Optional[str]:
+    """
+    Local intent (bag-of-words + keras) ашиглан intent тодорхойлоод,
+    intents.json дахь 'responses'-оос шууд буцаана. Таарахгүй бол None.
+    """
+    if DISABLE_LOCAL or model is None or not intents:
+        return None
+
+    ranked = predict_class(user_msg, threshold=INTENT_THRESHOLD)
+    if not ranked:
+        return None
+
+    top = ranked[0]
+    intent_tag = top["intent"]
+    # intents.json дотор tag-аа хайж, responses-оос нэгийг сонгоно
+    for it in intents.get("intents", []):
+        if it.get("tag") == intent_tag and it.get("responses"):
+            return random.choice(it["responses"])
+    return None
 
 # ---------------- OpenAI client ----------------
 from openai import OpenAI, OpenAIError
@@ -320,9 +341,12 @@ def build_general_prompt(user_msg: str, file_blobs: List[Tuple[str,str]]) -> str
 def chatbot_response(msg: str, files: Optional[List[str]] = None) -> str:
     """
     Unified chat entry:
-    - If files attached: extract text; if the intent seems 'sentiment' or data looks like comments table,
-      build a sentiment prompt; else general prompt with materials.
-    - If no file: use LLM general Q&A (and keep markdown).
+    1) Хэрэв файл хавсаргасан бол:
+        - 'sentiment' төрлийн үүрэг эсвэл хүснэгтэн сэтгэгдэлтэй бол sentiment prompt
+        - бусад үед ерөнхий prompt
+    2) Файл байхгүй бол:
+        - Эхлээд local INTENT → responses (амжилттай бол шууд буцаана)
+        - Таарахгүй бол OpenAI ерөнхий Q&A (fallback)
     """
     msg = (msg or "").strip()
     files = files or []
@@ -330,7 +354,7 @@ def chatbot_response(msg: str, files: Optional[List[str]] = None) -> str:
     if not _client:
         return "⚠️ OpenAI түлхүүр тохируулагдаагүй байна. .env дахь OPENAI_API_KEY-г тохируулна уу."
 
-    # Extract materials
+    # ---------- FILES ----------
     blobs: List[Tuple[str,str]] = []
     for f in files:
         try:
@@ -340,7 +364,6 @@ def chatbot_response(msg: str, files: Optional[List[str]] = None) -> str:
         except Exception as e:
             blobs.append((f"[extract_error:{e}]", f"[{Path(f).name}]"))
 
-    # Heuristic: sentiment?
     lower = msg.lower()
     wants_sentiment = any(k in lower for k in ["sentiment", "сентимент", "сэтгэгдэл", "эерэг", "сөрөг", "саармаг"])
     looks_like_comments = any(
@@ -356,6 +379,10 @@ def chatbot_response(msg: str, files: Optional[List[str]] = None) -> str:
         prompt = build_general_prompt(msg or "Доорх материалд үндэслэн дүгнэлт гарга.", blobs)
         return ask_openai(prompt)
 
-    # No files → plain chat
+    # ---------- NO FILES → INTENT then Fallback ----------
+    ans = intent_reply(msg)
+    if ans:
+        return ans
+
     prompt = build_general_prompt(msg or "Сайн уу", [])
     return ask_openai(prompt)

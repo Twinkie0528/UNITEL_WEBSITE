@@ -34,7 +34,7 @@
     /* Header */
     .nav{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.7);backdrop-filter:saturate(180%) blur(10px);border-bottom:1px solid var(--line)}
     .dark .nav{background:rgba(23,32,51,.7)}
-    .nav-inner{max-width:1120px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;justify-content:space-between}
+    .nav-inner{max-width:1120px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
     .brand{display:flex;gap:10px;align-items:center;font-weight:700;text-decoration:none;color:var(--ink)}
     .brand img{height:28px}
     .menu{display:flex;gap:10px;align-items:center}
@@ -43,8 +43,11 @@
     .btn-ghost{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:12px;padding:8px 12px;cursor:pointer}
     .btn-ghost:hover{border-color:var(--brand);color:var(--brand)}
     .btn-admin{background:var(--brand);color:#fff;border:none;border-radius:12px;padding:8px 14px;box-shadow:0 8px 24px var(--glow);cursor:pointer}
+    .user{display:flex;align-items:center;gap:10px;color:var(--muted);font-weight:600}
+    .logout{border:1px solid var(--line);background:#fff;color:#0f172a;border-radius:10px;padding:6px 10px;cursor:pointer}
+    .dark .logout{background:#1d2942;color:#e5e7eb}
 
-    /* Hero + features (хэвээр) */
+    /* Hero + features */
     .wrap{max-width:1120px;margin:40px auto;padding:0 20px}
     .hero{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}
     @media (max-width:980px){.hero{grid-template-columns:1fr}}
@@ -97,6 +100,10 @@
     .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#1f2a40;color:#fff;border-radius:12px;padding:10px 14px;font-size:14px;opacity:0;pointer-events:none;transition:.2s}
     .toast.show{opacity:1}
     footer{margin:32px 0 50px;text-align:center;color:var(--subtle);font-size:13px}
+
+    /* Mini admin chip (only for admin) */
+    .admin-bar{display:flex;align-items:center;gap:10px}
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--brand-weak);color:var(--brand);font-weight:800;font-size:12px}
   </style>
 </head>
 <body>
@@ -108,18 +115,41 @@
         <img src="/static/images/unitel-logo.png" alt="Unitel logo">
         <span>Unitel AI Hub</span>
       </a>
+
       <div class="menu">
         <a href="/">Нүүр</a>
-        <a href="/login">Нэвтрэх</a>
         <a href="/scraper/">Ad report</a>
+
+        <!-- Зөвхөн АДМИН хэрэглэгчидэд "Админ" товч харагдана -->
+        {% if current_user.is_authenticated and current_user.role == 'admin' %}
+          <a class="btn-admin" href="/admin/users">Админ</a>
+        {% endif %}
+
         <button id="mode" class="btn-ghost" title="Dark/Light">🌙</button>
-        <a class="btn-admin" href="/admin">Админ</a>
+
+        <!-- Нэвтэрсэн хэрэглэгчийн мэдээлэл + гарах -->
+        {% if current_user.is_authenticated %}
+          <div class="user">
+            {{ current_user.email }}
+            <form method="post" action="{{ url_for('logout') }}">
+              <button class="logout" type="submit" title="Гарах">Гарах</button>
+            </form>
+          </div>
+        {% endif %}
       </div>
     </div>
   </header>
 
   <!-- Hero -->
   <div class="wrap">
+    <!-- Админ бараа (жижиг тайлбар) -->
+    {% if current_user.is_authenticated and current_user.role == 'admin' %}
+      <div class="admin-bar" style="margin-bottom:16px">
+        <span class="badge">Admin</span>
+        <span style="color:var(--muted)">Хэрэглэгчийн зөвшөөрөл, идэвхжилтийг <a href="/admin/users">Админ самбар</a>-аас удирдана.</span>
+      </div>
+    {% endif %}
+
     <section class="hero">
       <div class="hero-card">
         <h1>Маркетинг & Инновацийн AI Туслах</h1>
@@ -165,8 +195,7 @@
     const $=(s,p=document)=>p.querySelector(s), $$=(s,p=document)=>Array.from(p.querySelectorAll(s));
     const chat=$("#chat"), msg=$("#msg"), send=$("#send"), pick=$("#pick"), file=$("#file"), dz=$("#dz"), files=$("#files");
     const toast=$("#toast"), mode=$("#mode");
-    let queue=[]; // selected files
-    let typing=null; let sending=false;
+    let queue=[]; let typing=null; let sending=false;
 
     // theme
     const root=document.documentElement;
@@ -177,7 +206,7 @@
     const tstamp=()=>new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
     const esc=s=>s.replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
     const linkify=t=>esc(t).replace(/(https?:\/\/[^\s]+|\/report\/[^\s]+)/g,m=>`<a href="${m}" target="_blank" rel="noopener">${m}</a>`);
-    const md = (s)=> linkify(s) // simple; server аль хэдийн markdown буцааж байгаа бол хангалттай
+    const md = (s)=> linkify(s)
       .replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")
       .replace(/\*(.+?)\*/g,"<i>$1</i>")
       .replace(/^\s*-\s+(.*)$/gm,"• $1")
@@ -233,7 +262,7 @@
         if(queue.length){
           const fd=new FormData();
           fd.append("message", text);
-          queue.forEach(f=>fd.append("files", f, f.name)); // backend: request.files.getlist("files")
+          queue.forEach(f=>fd.append("files", f, f.name));
           res = await fetch("/chatbot",{ method:"POST", body:fd, credentials:"include" });
         }else{
           res = await fetch("/chatbot",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({question:text}), credentials:"include" });

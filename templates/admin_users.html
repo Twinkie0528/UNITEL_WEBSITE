@@ -1,0 +1,130 @@
+﻿<!doctype html>
+<html lang="mn">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Админ — Хэрэглэгчид</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root{--ink:#0f172a;--muted:#64748b;--border:#e2e8f0;--bg:#f6faf7;--ok:#065f46;--okbg:#d1fae5;--brand:#00b140}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:'Montserrat',system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+    .wrap{max-width:1100px;margin:36px auto;padding:0 16px}
+    h1{margin:0 0 16px} h2{margin:24px 0 12px}
+    .topbar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:0 0 18px}
+    a.link{color:var(--brand);font-weight:800;text-decoration:none} a.link:hover{text-decoration:underline}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+    .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    input,select{border:1px solid var(--border);border-radius:10px;padding:8px 10px;font:inherit}
+    .pill{display:inline-block;padding:4px 8px;border-radius:999px;background:var(--okbg);color:var(--ok);font-weight:700;font-size:12px}
+    table{width:100%;border-collapse:collapse;background:#fff;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    th,td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:left;font-size:14px;vertical-align:middle}
+    tr:last-child td{border-bottom:none}
+    form{display:inline}
+    button{padding:8px 10px;border-radius:10px;border:1px solid var(--brand);background:var(--brand);color:#fff;font-weight:800;cursor:pointer}
+    button.secondary{border-color:#cbd5e1;background:#fff;color:#0f172a}
+    button.warn{border-color:#ef4444;background:#ef4444}
+    .muted{color:var(--muted)}
+    .msg{margin:0 0 12px; padding:10px 12px; border-radius:10px; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-weight:700; font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="topbar">
+      <h1>Админ — Хэрэглэгчид</h1>
+      <a class="link" href="/">Нүүр</a>
+    </div>
+
+    {% if ok %}<div class="msg">{{ ok }}</div>{% endif %}
+    {% if error %}<div class="msg" style="background:#fee2e2;border-color:#fecaca;color:#7f1d1d">{{ error }}</div>{% endif %}
+
+    <!-- Toolbar: Хэрэглэгч нэмэх + Хайлт -->
+    <div class="toolbar">
+      <form class="card row" method="post" action="{{ url_for('admin_create_user') }}">
+        <strong>Хэрэглэгч нэмэх</strong>
+        <input type="text" name="name" placeholder="Нэр" required>
+        {% set dom = (ALLOW_DOMAIN | default('@unitel.mn')) %}
+        <input type="email" name="email" placeholder="Имэйл ({{ dom }})"
+               required pattern="^[^@\s]+@{{ dom | replace('@','') }}$"
+               title="Дотоод домэйн имэйл шаардлагатай">
+        <select name="role">
+          <option value="user" selected>User</option>
+          <option value="admin">Admin</option>
+        </select>
+        <label class="row" style="gap:6px">
+          <input type="checkbox" name="approved" value="1" checked> Approved
+        </label>
+        <button type="submit">Нэмэх</button>
+      </form>
+
+      <form class="card row" method="get" action="{{ url_for('admin_users') }}">
+        <input type="text" name="q" value="{{ q or '' }}" placeholder="Нэр/имэйлээр хайх…">
+        <button class="secondary" type="submit">Хайх</button>
+        {% if q %}<a class="link" href="{{ url_for('admin_users') }}">Цэвэрлэх</a>{% endif %}
+      </form>
+    </div>
+
+    <h2>Зөвшөөрөл хүлээгдэж буй</h2>
+    <table>
+      <thead><tr><th>Нэр</th><th>Имэйл</th><th>Огноо</th><th></th></tr></thead>
+      <tbody>
+      {% for u in pending %}
+        {% set uid = (u.id if u.id is defined else (u['_id'] | string)) %}
+        <tr>
+          <td>{{ u.name }}</td>
+          <td>{{ u.email }}</td>
+          <td>{{ u.created_at }}</td>
+          <td>
+            <form method="post" action="{{ url_for('admin_approve', uid=uid) }}"><button>Approve</button></form>
+            <form method="post" action="{{ url_for('admin_delete', uid=uid) }}" onsubmit="return confirm('Энэ хэрэглэгчийг устгах уу?')">
+              <button class="warn" type="submit">Delete</button>
+            </form>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="4" class="muted">Хүлээгдэж буй хүсэлт алга.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+
+    <h2>Идэвхтэй хэрэглэгчид</h2>
+    <table>
+      <thead><tr><th>Нэр</th><th>Имэйл</th><th>Role</th><th>Сүүлд нэвтэрсэн</th><th></th></tr></thead>
+      <tbody>
+      {% for u in active %}
+        {% set uid = (u.id if u.id is defined else (u['_id'] | string)) %}
+        <tr>
+          <td class="row">
+            {{ u.name }}
+            {% if (u.role or '') | lower == 'admin' %}
+              <span class="pill">Admin</span>
+            {% endif %}
+          </td>
+          <td>{{ u.email }}</td>
+          <td>{{ u.role }}</td>
+          <td>{{ u.last_login or '' }}</td>
+          <td class="row">
+            {% if (u.role or '') | lower != 'admin' %}
+              <form method="post" action="{{ url_for('admin_promote', uid=uid) }}"><button>Promote to Admin</button></form>
+              <form method="post" action="{{ url_for('admin_revoke', uid=uid) }}"><button class="secondary">Revoke</button></form>
+              <form method="post" action="{{ url_for('admin_delete', uid=uid) }}" onsubmit="return confirm('Энэ хэрэглэгчийг устгах уу?')">
+                <button class="warn" type="submit">Delete</button>
+              </form>
+            {% else %}
+              <form method="post" action="{{ url_for('admin_demote', uid=uid) }}" onsubmit="return confirm('Энэ админыг user болгох уу?')">
+                <button class="secondary">Demote to User</button>
+              </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="5" class="muted">Хоосон.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>

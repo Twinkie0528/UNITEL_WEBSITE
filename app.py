@@ -1,4 +1,4 @@
-﻿# app.py — Unitel AI Hub (Mongo + Scraper dashboard + Background "Scrape Now")
+﻿# app.py — Unitel AI Hub (Auth + Scraper + Ads ingest + Chatbot)
 from __future__ import annotations
 
 import csv
@@ -14,11 +14,12 @@ from threading import Lock, Thread
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlparse
 from collections import deque
+import re
 
 from dotenv import load_dotenv, dotenv_values
 from flask import (
     Flask, Blueprint, abort, jsonify, render_template, request, send_file,
-    send_from_directory
+    send_from_directory, redirect, url_for
 )
 from flask_cors import CORS
 from pymongo import ASCENDING, DESCENDING, MongoClient
@@ -26,8 +27,16 @@ from pymongo.collection import Collection
 from pymongo.errors import PyMongoError
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
+from bson import ObjectId
 
-import processor  # ← sentiment/чатботын логик энд
+# ---- Auth (Flask-Login)
+from flask_login import (
+    LoginManager, UserMixin, login_user, logout_user,
+    current_user, login_required
+)
+
+import processor  # таны chatbot / sentiment логик
 
 # --------------------------- Boot & Config ---------------------------
 load_dotenv()
@@ -59,7 +68,24 @@ for d in (STATIC_DIR, UPLOAD_ROOT, BANNER_SCREENSHOT_DIR, SCRAPER_EXPORT_DIR, LO
 
 app = Flask(__name__, template_folder=str(TEMPLATES_DIR), static_folder=str(STATIC_DIR))
 app.config["JSON_SORT_KEYS"] = False
-CORS(app)
+
+# --- Session/Cookie хамгаалалт (prod-д HTTPS үед secure)
+SECURE_COOKIES = os.getenv("SESSION_COOKIE_SECURE", "0") == "1"  
+app.config.update(
+    SESSION_COOKIE_SAMESITE="Lax",
+    REMEMBER_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=SECURE_COOKIES,
+    REMEMBER_COOKIE_SECURE=SECURE_COOKIES,
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=12),
+)
+
+# CORS (шаардлагатай бол ENV-д CORS_ORIGINS-г зориулах)
+CORS(app,
+     resources={r"/*": {"origins": os.getenv("CORS_ORIGINS", "*").split(",")}},
+     supports_credentials=True)
+
+# Secret for sessions (FLASK_SECRET -> SECRET_KEY fallback)
+app.secret_key = os.getenv("FLASK_SECRET") or os.getenv("SECRET_KEY") or "dev_secret_change_me"
 
 PORT = int(os.getenv("PORT", "8888"))
 MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017/")
@@ -103,6 +129,73 @@ ads_collection.create_index(
 )
 ads_collection.create_index([("detected_at", DESCENDING)], name="detected_at_desc", background=True)
 
+# ---- Users collection (for auth)
+users_collection: Collection = db["users"]
+users_collection.create_index([("email", ASCENDING)], unique=True, background=True)
+users_collection.create_index([("approved", ASCENDING), ("created_at", DESCENDING)], background=True)
+
+# --------------------------- Auth (Flask-Login) ---------------------------
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
+
+# ALLOW_DOMAIN -> dynamic email regex
+ALLOW_DOMAIN = (os.getenv("ALLOW_DOMAIN") or "@unitel.mn").strip()
+_allow = re.escape(ALLOW_DOMAIN.lstrip("@"))  # unitel.mn -> escape
+EMAIL_RE = re.compile(rf"^[^@\s]+@{_allow}$", re.IGNORECASE)
+
+class User(UserMixin):
+    def __init__(self, doc: Dict[str, Any]):
+        self._doc = doc
+        self.id = str(doc["_id"])
+        self.email = doc["email"]
+        self.name = doc.get("name") or self.email.split("@")[0]
+        self.role = doc.get("role", "user")
+        self.approved = bool(doc.get("approved", False))
+
+    @property
+    def is_active(self) -> bool:
+        return bool(self.approved)
+
+def _to_user(doc: Optional[Dict[str, Any]]) -> Optional[User]:
+    return User(doc) if doc else None
+
+@login_manager.user_loader
+def load_user(user_id: str) -> Optional[User]:
+    try:
+        doc = users_collection.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        doc = None
+    return _to_user(doc)
+
+def admin_required(fn):
+    from functools import wraps
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for("login"))
+        if getattr(current_user, "role", "user") != "admin":
+            abort(403)
+        return fn(*args, **kwargs)
+    return wrapper
+
+# Login дараах redirect-ийг дотоод URL-д хязгаарлах
+def _safe_next_url(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+    try:
+        u = urlparse(raw)
+        if not u.scheme and not u.netloc and raw.startswith("/"):
+            return raw
+    except Exception:
+        pass
+    return None
+
+# templates-д домэйн placeholder дамжуулах
+@app.context_processor
+def inject_globals():
+    return {"ALLOW_DOMAIN": ALLOW_DOMAIN}
+
+# --------------------------- Reports / Aggregation ---------------------------
 REPORT_HEADERS = [
     "ad_id","site","brand","first_seen_date","last_seen_date","days_seen","times_seen",
     "status","src_open","landing_open","screenshot",
@@ -308,8 +401,9 @@ def chatbot_command_router(message: str) -> Optional[Dict[str, str]]:
         return {"response": note}
     return None
 
-# --------------------------- Root page ---------------------------
+# --------------------------- Root page (Protected) ---------------------------
 @app.get("/")
+@login_required
 def index() -> str:
     return render_template("index.html")
 
@@ -317,6 +411,7 @@ def index() -> str:
 scraper_bp = Blueprint("scraper", __name__, url_prefix="/scraper")
 
 @scraper_bp.route("/")
+@login_required
 def report():
     rows: List[Dict[str, str]] = []
     if TSV_PATH.exists():
@@ -326,15 +421,22 @@ def report():
                 today = datetime.now(timezone.utc).date().isoformat()
                 for r in rd:
                     # --- normalize: screenshot path → /shots/.. ---
-                    r["screenshot_file"] = r.get("screenshot_file") or r.get("screenshot_path") or r.get("screenshot") or ""
+                    r["screenshot_file"] = (
+                        r.get("screenshot_file")
+                        or r.get("screenshot_path")
+                        or r.get("screenshot")
+                        or ""
+                    )
                     if r["screenshot_file"]:
                         s = r["screenshot_file"].replace("\\", "/")
                         try:
-                            ap = Path(s); ap = ap if ap.is_absolute() else Path("/" + s.lstrip("/"))
+                            ap = Path(s)
+                            ap = ap if ap.is_absolute() else Path("/" + s.lstrip("/"))
                             rel = ap.resolve().relative_to(BANNER_SCREENSHOT_DIR)
                             r["screenshot_file"] = f"/shots/{rel.as_posix()}"
                         except Exception:
-                            key = "/banner_screenshots/"; i = s.lower().find(key)
+                            key = "/banner_screenshots/"
+                            i = s.lower().find(key)
                             r["screenshot_file"] = f"/shots/{s[i+len(key):]}" if i != -1 else s
 
                     # --- normalize: landing URL field name(s) ---
@@ -373,6 +475,7 @@ def report():
     )
 
 @scraper_bp.get("/status")
+@login_required
 def scraper_status_bp():
     return jsonify({
         "running": scraper_is_running(),
@@ -383,6 +486,7 @@ def scraper_status_bp():
     })
 
 @scraper_bp.post("/scrape-now")
+@login_required
 def scrape_now_bp():
     started = start_scraper_job()
     status = {
@@ -395,12 +499,14 @@ def scrape_now_bp():
     return jsonify({"ok": True, "started": started, "status": status})
 
 @scraper_bp.get("/download/tsv")
+@login_required
 def download_tsv():
     if not TSV_PATH.exists():
         abort(404)
     return send_file(TSV_PATH, as_attachment=True, download_name="banner_tracking_combined.tsv")
 
 @scraper_bp.get("/download/xlsx")
+@login_required
 def download_xlsx():
     x = SCRAPER_EXPORT_DIR / "summary.xlsx"
     if not x.exists():
@@ -411,6 +517,7 @@ app.register_blueprint(scraper_bp)
 
 # --------------------------- Chatbot API (Sentiment + Files) ---------------------------
 @app.post("/chatbot")
+@login_required
 def chatbot() -> Any:
     # 1) multipart/form-data (текст + файлууд)
     if request.content_type and request.content_type.startswith("multipart/form-data"):
@@ -440,6 +547,7 @@ def chatbot() -> Any:
 
 # --------------------------- Ads summary API ---------------------------
 @app.get("/ads/api/summary")
+@login_required
 def api_ads_summary() -> Any:
     days = parse_days_arg(request.args.get("days"), default=30)
     try:
@@ -501,11 +609,134 @@ def api_ingest() -> Any:
 
 # ---- Serve screenshots ----
 @app.get("/shots/<path:relpath>")
+@login_required
 def serve_shot(relpath: str):
     p = (BANNER_SCREENSHOT_DIR / relpath).resolve()
     if not str(p).startswith(str(BANNER_SCREENSHOT_DIR)) or not p.exists():
         abort(404)
     return send_file(p)
+
+# --------------------------- Auth Routes (Login/Register/Admin) ---------------------------
+@app.get("/login")
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+    return render_template("login.html", email=request.args.get("email",""))
+
+@app.post("/login")
+def do_login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+    data = request.form or {}
+    email = (data.get("email") or "").strip().lower()
+    password = (data.get("password") or "").strip()
+    udoc = users_collection.find_one({"email": email})
+    if not udoc or not check_password_hash(udoc.get("password_hash", ""), password):
+        return render_template("login.html", error="Имэйл/нууц үг буруу байна.", email=email)
+    if not udoc.get("approved", False):
+        return render_template("login.html", error="Таны бүртгэл админ зөвшөөрөл хүлээж байна.", email=email)
+    login_user(User(udoc))
+    users_collection.update_one({"_id": udoc["_id"]}, {"$set": {"last_login": datetime.utcnow()}})
+    next_url = _safe_next_url(request.args.get("next"))
+    return redirect(next_url or url_for("index"))
+
+@app.get("/register")
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+    return render_template("register.html")
+
+@app.post("/register")
+def do_register():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+    data = request.form or {}
+    name = (data.get("name") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    password = (data.get("password") or "").strip()
+    password2 = (data.get("password2") or "").strip()
+
+    if not EMAIL_RE.match(email):
+        return render_template("register.html", error=f"{ALLOW_DOMAIN} имэйл шаардлагатай.")
+
+    if len(password) < 8:
+        return render_template("register.html", error="Нууц үг хамгийн багадаа 8 тэмдэгт байх ёстой.")
+    if password != password2:
+        return render_template("register.html", error="Нууц үг хоорондоо таарахгүй байна.")
+
+    if users_collection.find_one({"email": email}):
+        return render_template("register.html", error="Энэ имэйлээр бүртгэл аль хэдийн байна.")
+
+    users_collection.insert_one({
+        "name": name or email.split("@")[0],
+        "email": email,
+        "password_hash": generate_password_hash(password),
+        "role": "user",
+        "approved": False,
+        "created_at": datetime.utcnow(),
+    })
+    return render_template("login.html", info="Бүртгэл амжилттай. Админ зөвшөөрсний дараа нэвтэрнэ үү.")
+
+@app.post("/logout")
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for("login"))
+
+@app.get("/admin/users")
+@admin_required
+def admin_users():
+    pend = list(users_collection.find({"approved": False}).sort("created_at", DESCENDING))
+    actv = list(users_collection.find({"approved": True}).sort("created_at", DESCENDING))
+    return render_template("admin_users.html", pending=pend, active=actv)
+
+@app.post("/admin/users/<uid>/approve")
+@admin_required
+def admin_approve(uid):
+    users_collection.update_one({"_id": ObjectId(uid)}, {"$set": {"approved": True}})
+    return redirect(url_for("admin_users"))
+
+@app.post("/admin/users/<uid>/revoke")
+@admin_required
+def admin_revoke(uid):
+    users_collection.update_one({"_id": ObjectId(uid)}, {"$set": {"approved": False}})
+    return redirect(url_for("admin_users"))
+
+# ---- Dev seed admin (uses ADMIN_EMAIL + ADMIN_PASSWORD)
+@app.post("/_dev/seed-admin")
+def seed_admin():
+    if os.getenv("ENV", "dev") != "dev":
+        abort(404)
+
+    email = (os.getenv("ADMIN_EMAIL") or "").strip().lower()
+    if not EMAIL_RE.match(email):
+        return {"ok": False, "error": f"ADMIN_EMAIL нь {ALLOW_DOMAIN} домэйноор байх ёстой"}, 400
+
+    admin_pw = os.getenv("ADMIN_PASSWORD")
+    if not admin_pw or len(admin_pw) < 6:
+        import secrets
+        admin_pw = "Adm!" + secrets.token_hex(6)
+
+    u = users_collection.find_one({"email": email})
+    if u:
+        users_collection.update_one(
+            {"_id": u["_id"]},
+            {"$set": {"role": "admin", "approved": True, "password_hash": generate_password_hash(admin_pw)}}
+        )
+        action = "updated"
+    else:
+        users_collection.insert_one({
+            "name": email.split("@")[0],
+            "email": email,
+            "password_hash": generate_password_hash(admin_pw),
+            "role": "admin",
+            "approved": True,
+            "created_at": datetime.utcnow()
+        })
+        action = "created"
+
+    log.info("Seed admin %s for %s (approved=True, role=admin)", action, email)
+    return {"ok": True, "email": email, "action": action}
 
 # ---- Tools ----
 @app.get("/tools/reset")
@@ -517,6 +748,10 @@ def tools_reset() -> Any:
     removed_shots = wipe_directory_contents(BANNER_SCREENSHOT_DIR)
     log.info("Test data reset: docs=%s static=%s shots=%s", deleted, removed_static, removed_shots)
     return jsonify({"ok": True,"deleted_documents":deleted,"removed_static_files":removed_static,"removed_screenshots":removed_shots})
+
+@app.errorhandler(403)
+def forbidden(_):
+    return render_template("login.html", error="Энэ хуудас зөвхөн админд нээлттэй."), 403
 
 # ---- Main ----
 if __name__ == "__main__":
