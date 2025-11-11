@@ -1,6 +1,10 @@
 ﻿# -*- coding: utf-8 -*-
 # scraper/run.py — САЙЖРУУЛСАН ХУВИЛБАР (Зэрэгцээ ажиллагаатай)
 import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+os.chdir(BASE_DIR)
+
+import os
 import json
 import time
 import traceback
