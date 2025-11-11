@@ -25,6 +25,7 @@ Thumbs.db
 # Secrets & keys
 .env
 Server-key/
+Unitel-Web.pem
 
 # Local DB / generated data
 bookings.db
