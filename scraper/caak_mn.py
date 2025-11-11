@@ -5,10 +5,14 @@ import time
 import hashlib
 import urllib.parse
 from typing import List, Dict, Set
-from playwright.sync_api import sync_playwright
+# <<< ЗАСВАР 1: Алдаа барихын тулд 'Error'-г 'PlaywrightError' нэрээр импортлох
+from playwright.sync_api import sync_playwright, Error as PlaywrightError
 from common import ensure_dir, http_get_bytes, classify_ad
 
 HOME = "https://www.caak.mn/"
+# <<< ЗАСВАР 2: Жинхэнэ хөтөч мэт харагдуулах User-Agent нэмэх
+USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36"
+
 
 AD_IFRAME_HINTS = (
     "googlesyndication.com", "doubleclick.net", "adnxs.com", "ads.pubmatic.com",
@@ -160,8 +164,34 @@ def scrape_caak(output_dir: str, dwell_seconds: int = 45, headless: bool = True,
     with sync_playwright() as p:
         br = p.chromium.launch(headless=headless)
         try:
-            pg = br.new_page(viewport={"width": 1680, "height": 1200})
-            pg.goto(HOME, timeout=90000, wait_until="domcontentloaded")
+            # <<< ЗАСВАР 3: Browser Context үүсгэж, User-Agent-г тохируулах
+            context = br.new_context(
+                user_agent=USER_AGENT,
+                viewport={"width": 1680, "height": 1200}
+            )
+            context.set_default_navigation_timeout(90000) # Timeout-г context-д тохируулах
+            pg = context.new_page()
+
+            # <<< ЗАСВАР 4: Алдаа гарвал дахин оролдох (Retry) логик
+            MAX_RETRIES = 3
+            for attempt in range(MAX_RETRIES):
+                try:
+                    print(f"INFO: {HOME}-д хандаж байна (Оролдлого {attempt + 1}/{MAX_RETRIES})...")
+                    pg.goto(HOME, wait_until="domcontentloaded")
+                    print(f"INFO: {HOME}-д амжилттай хандлаа.")
+                    break # Амжилттай бол давталтаас гарна
+                except PlaywrightError as e:
+                    print(f"WARNING: {HOME}-д хандах үед алдаа гарлаа (Оролдлого {attempt + 1}): {e}")
+                    if attempt < MAX_RETRIES - 1:
+                        wait_time = (attempt + 1) * 5 # 5, 10 секунд хүлээх
+                        print(f"INFO: {wait_time} секунд хүлээгээд дахин оролдоно...")
+                        time.sleep(wait_time)
+                    else:
+                        print(f"FATAL: {MAX_RETRIES} удаа оролдоод {HOME}-д хандаж чадсангүй.")
+                        raise e # Хамгийн сүүлийн алдааг дээш шидэх
+            
+            # --- Эндээс цааш код хэвийн үргэлжилнэ ---
+
             _prime_page(pg)
 
             out.extend(_collect_caak(pg, output_dir, seen, ads_only, min_score))

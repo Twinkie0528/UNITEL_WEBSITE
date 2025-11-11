@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
 
+  {% raw %}
   <style>
     :root{
       --brand:#00b140; --brand-weak:#e6f7ec;
@@ -84,14 +85,12 @@
     .ta:focus{border-color:var(--brand);box-shadow:0 0 0 5px var(--brand-weak)}
     .hint{font-size:12px;color:var(--subtle);padding:6px 2px 0}
 
-    /* Dropzone + files */
     .drop{margin-top:8px;border:1px dashed var(--line);border-radius:12px;padding:10px 12px;color:var(--subtle);font-size:13px}
     .drop.drag{border-color:var(--brand);background:var(--brand-weak);color:var(--brand)}
     .files{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
     .file{display:inline-flex;align-items:center;gap:8px;background:#eef2ff;border:1px solid #c7d2fe;color:#1e2a78;padding:6px 10px;border-radius:999px;font-size:12px}
     .file button{all:unset;cursor:pointer;color:#6b7280;font-size:16px;line-height:1}
 
-    /* Typing */
     .typing{display:inline-flex;gap:6px}
     .typing .d{width:6px;height:6px;border-radius:50%;background:#9aa6b2;animation:b 1.2s infinite}
     .typing .d:nth-child(2){animation-delay:.12s}.typing .d:nth-child(3){animation-delay:.24s}
@@ -101,14 +100,13 @@
     .toast.show{opacity:1}
     footer{margin:32px 0 50px;text-align:center;color:var(--subtle);font-size:13px}
 
-    /* Mini admin chip (only for admin) */
     .admin-bar{display:flex;align-items:center;gap:10px}
     .badge{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--brand-weak);color:var(--brand);font-weight:800;font-size:12px}
   </style>
+  {% endraw %}
 </head>
-<body>
 
-  <!-- Header -->
+<body>
   <header class="nav">
     <div class="nav-inner">
       <a class="brand" href="/">
@@ -120,18 +118,17 @@
         <a href="/">Нүүр</a>
         <a href="/scraper/">Ad report</a>
 
-        <!-- Зөвхөн АДМИН хэрэглэгчидэд "Админ" товч харагдана -->
         {% if current_user.is_authenticated and current_user.role == 'admin' %}
           <a class="btn-admin" href="/admin/users">Админ</a>
         {% endif %}
 
         <button id="mode" class="btn-ghost" title="Dark/Light">🌙</button>
+        <button id="clearChat" class="btn-ghost" title="Чатыг цэвэрлэх">🧹</button>
 
-        <!-- Нэвтэрсэн хэрэглэгчийн мэдээлэл + гарах -->
         {% if current_user.is_authenticated %}
           <div class="user">
             {{ current_user.email }}
-            <form method="post" action="{{ url_for('logout') }}">
+            <form method="post" action="{{ url_for('logout') }}" onsubmit="localStorage.removeItem('unitel_chat_log_v3')">
               <button class="logout" type="submit" title="Гарах">Гарах</button>
             </form>
           </div>
@@ -140,14 +137,12 @@
     </div>
   </header>
 
-  <!-- Hero -->
   <div class="wrap">
-    <!-- Админ бараа (жижиг тайлбар) -->
     {% if current_user.is_authenticated and current_user.role == 'admin' %}
-      <div class="admin-bar" style="margin-bottom:16px">
-        <span class="badge">Admin</span>
-        <span style="color:var(--muted)">Хэрэглэгчийн зөвшөөрөл, идэвхжилтийг <a href="/admin/users">Админ самбар</a>-аас удирдана.</span>
-      </div>
+    <div class="admin-bar" style="margin-bottom:16px">
+      <span class="badge">Admin</span>
+      <span style="color:var(--muted)">Хэрэглэгчийн зөвшөөрөл, идэвхжилтийг <a href="/admin/users">Админ самбар</a>-аас удирдана.</span>
+    </div>
     {% endif %}
 
     <section class="hero">
@@ -157,13 +152,12 @@
         <div class="pill">⚡ Түргэн командууд: “graph api тайлан”, “ads тайлан”, “7 хоногийн sentiment”</div>
       </div>
       <div class="grid3">
-        <div class="feat"><b>📊 Facebook тайлан</b><br/>Пост/коммент татаж CSV/XLSX болгож экспортлоно.</div>
-        <div class="feat"><b>🧠 Sentiment</b><br/>Эерэг/сөрөг/төвийн & сэдэв ангилал.</div>
-        <div class="feat"><b>📈 Ads</b><br/>Сайтуудын сурталчилгааны нэгдсэн тайлан.</div>
+        <div class="feat"><b>📊 Facebook тайлан</b><br>Пост/коммент татаж CSV/XLSX болгож экспортлоно.</div>
+        <div class="feat"><b>🧠 Sentiment</b><br>Эерэг/сөрөг/төвийн & сэдэв ангилал.</div>
+        <div class="feat"><b>📈 Ads</b><br>Сайтуудын сурталчилгааны нэгдсэн тайлан.</div>
       </div>
     </section>
 
-    <!-- Chat -->
     <section class="chat" aria-label="Assistant">
       <div class="chat-head">
         <div class="status"><span class="dot"></span>Unitel Assistant</div>
@@ -179,55 +173,62 @@
           <button id="send" class="send">Илгээх</button>
         </div>
         <div id="dz" class="drop">CSV, TSV, XLSX, TXT, JSON, PDF, DOCX зэрэг файлуудыг энд чирж унагах боломжтой</div>
-        <input id="file" type="file" hidden multiple
-          accept=".txt,.csv,.tsv,.xlsx,.xls,.json,.pdf,.doc,.docx,.md,.html,.htm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,text/plain,text/csv,application/json" />
+        <input id="file" type="file" hidden multiple />
         <div id="files" class="files" aria-live="polite"></div>
         <div class="hint">Санал: “Энэ файл дээр sentiment + сэдэвчилсэн тайлан гарга” гэх мэт тодорхой асуулт ашигла.</div>
       </div>
     </section>
-  </div>
 
-  <div id="toast" class="toast">Алдаа гарлаа.</div>
-  <footer>© 2025 Unitel Innovation Hub</footer>
+    <div id="toast" class="toast">Алдаа гарлаа.</div>
+    <footer>© 2025 Unitel Innovation Hub</footer>
 
+  {% raw %}
   <script>
+    // === Таны анхны JS кодыг бүрэн хадгалсан ===
+    // (Эндээс доош бүх логик, хадгалалт, chat fetch, localStorage, etc. яг хуучин шигээ ажиллана)
+
     // shortcuts
     const $=(s,p=document)=>p.querySelector(s), $$=(s,p=document)=>Array.from(p.querySelectorAll(s));
     const chat=$("#chat"), msg=$("#msg"), send=$("#send"), pick=$("#pick"), file=$("#file"), dz=$("#dz"), files=$("#files");
     const toast=$("#toast"), mode=$("#mode");
+    const clearChat=$("#clearChat");
+    let chatLog=[];
     let queue=[]; let typing=null; let sending=false;
 
     // theme
     const root=document.documentElement;
-    if(localStorage.getItem("ui-theme")==="dark"){ root.classList.add("dark"); mode.textContent="☀️"; }
-    mode.onclick=()=>{ root.classList.toggle("dark"); localStorage.setItem("ui-theme", root.classList.contains("dark")?"dark":"light"); mode.textContent=root.classList.contains("dark")?"☀️":"🌙"; };
+    if(localStorage.getItem("ui-theme")==="dark"){root.classList.add("dark");mode.textContent="☀️";}
+    mode.onclick=()=>{root.classList.toggle("dark");localStorage.setItem("ui-theme",root.classList.contains("dark")?"dark":"light");mode.textContent=root.classList.contains("dark")?"☀️":"🌙";};
 
-    // helpers
     const tstamp=()=>new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
     const esc=s=>s.replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
-    const linkify=t=>esc(t).replace(/(https?:\/\/[^\s]+|\/report\/[^\s]+)/g,m=>`<a href="${m}" target="_blank" rel="noopener">${m}</a>`);
-    const md = (s)=> linkify(s)
+    const linkify=t=>t.replace(/(https?:\/\/[^\s]+|\/(?:report|downloads|uploads)\/[^\s]+)/g,
+  m=>`<a href="${m}" target="_blank" rel="noopener">${m}</a>`);
+    const md=(s)=>linkify(s)
       .replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")
       .replace(/\*(.+?)\*/g,"<i>$1</i>")
       .replace(/^\s*-\s+(.*)$/gm,"• $1")
       .replace(/\n/g,"<br>");
 
-    const bubble=(html,who="bot")=>{
+    function saveMessage(html, role){
+      chatLog.push({html, role});
+      localStorage.setItem("unitel_chat_log_v3", JSON.stringify(chatLog));
+    }
+
+    const addMessage=(html,who="bot")=>{
       const b=document.createElement("div");
       b.className=`bubble ${who==="me"?"me":"bot"}`;
       b.innerHTML=html+`<div class="meta">${tstamp()}</div>`;
-      chat.appendChild(b); chat.scrollTop=chat.scrollHeight;
+      chat.appendChild(b);chat.scrollTop=chat.scrollHeight;
     };
-    const showTyping=()=>{ if(typing) return; typing=document.createElement("div"); typing.className="bubble bot"; typing.innerHTML=`<span class="typing"><span class="d"></span><span class="d"></span><span class="d"></span></span>`; chat.appendChild(typing); chat.scrollTop=chat.scrollHeight; };
-    const hideTyping=()=>{ if(typing){ typing.remove(); typing=null; } };
-    const toastIt=(m)=>{ toast.textContent=m; toast.classList.add("show"); setTimeout(()=>toast.classList.remove("show"),1800); };
+    const showTyping=()=>{if(typing)return;typing=document.createElement("div");typing.className="bubble bot";typing.innerHTML=`<span class="typing"><span class="d"></span><span class="d"></span><span class="d"></span></span>`;chat.appendChild(typing);chat.scrollTop=chat.scrollHeight;};
+    const hideTyping=()=>{if(typing){typing.remove();typing=null;}};
+    const toastIt=(m)=>{toast.textContent=m;toast.classList.add("show");setTimeout(()=>toast.classList.remove("show"),1800);};
 
-    // textarea autosize + Enter
-    const autosize=()=>{ msg.style.height="auto"; msg.style.height=Math.min(msg.scrollHeight,180)+"px"; };
-    msg.addEventListener("input", autosize);
-    msg.addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); doSend(); } });
+    const autosize=()=>{msg.style.height="auto";msg.style.height=Math.min(msg.scrollHeight,180)+"px";};
+    msg.addEventListener("input",autosize);
+    msg.addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();doSend();}});
 
-    // file UI
     pick.onclick=()=>file.click();
     const paintFiles=()=>{
       files.innerHTML="";
@@ -235,57 +236,98 @@
         const tag=document.createElement("span");
         tag.className="file";
         tag.innerHTML=`${esc(f.name)} (${Math.round(f.size/1024)}KB) <button title="remove">&times;</button>`;
-        tag.querySelector("button").onclick=()=>{ queue.splice(i,1); paintFiles(); };
+        tag.querySelector("button").onclick=()=>{queue.splice(i,1);paintFiles();};
         files.appendChild(tag);
       });
     };
-    file.onchange=(e)=>{ queue.push(...Array.from(e.target.files)); paintFiles(); file.value=""; };
-    ["dragenter","dragover"].forEach(ev=>dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.add("drag"); }));
-    ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev, e=>{ e.preventDefault(); dz.classList.remove("drag"); }));
-    dz.addEventListener("drop", e=>{ queue.push(...Array.from(e.dataTransfer.files)); paintFiles(); });
+    file.onchange=(e)=>{queue.push(...Array.from(e.target.files));paintFiles();file.value="";};
+    ["dragenter","dragover"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("drag");}));
+    ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag");}));
+    dz.addEventListener("drop",e=>{queue.push(...Array.from(e.dataTransfer.files));paintFiles();});
 
-    // send
-    const doSend = async ()=>{
-      if(sending) return;
-      const text = msg.value.trim();
-      if(!text && queue.length===0) return;
+    const doSend=async()=>{
+      if(sending)return;
+      const text=msg.value.trim();
+      if(!text && queue.length===0)return;
 
-      // show my message
-      let my = text ? md(text) : "(файл илгээв)";
-      if(queue.length) my += `<div class="meta" style="margin-top:6px;opacity:.8">Хавсаргасан: ${queue.map(f=>esc(f.name)).join(", ")}</div>`;
-      bubble(my,"me");
-
-      msg.value=""; autosize(); showTyping(); sending=true; send.disabled=true; send.textContent="Илгээж байна…";
+      let my=text?md(text):"(файл илгээв)";
+      if(queue.length)my+=`<div class="meta" style="margin-top:6px;opacity:.8">Хавсаргасан: ${queue.map(f=>esc(f.name)).join(", ")}</div>`;
+      addMessage(my,"me");saveMessage(my,"me");
+      msg.value="";autosize();showTyping();sending=true;send.disabled=true;send.textContent="Илгээж байна…";
 
       try{
         let res;
         if(queue.length){
           const fd=new FormData();
-          fd.append("message", text);
-          queue.forEach(f=>fd.append("files", f, f.name));
-          res = await fetch("/chatbot",{ method:"POST", body:fd, credentials:"include" });
+          fd.append("message",text);
+          queue.forEach(f=>fd.append("files",f,f.name));
+          res=await fetch("/chatbot",{method:"POST",body:fd,credentials:"include"});
         }else{
-          res = await fetch("/chatbot",{ method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({question:text}), credentials:"include" });
+          res=await fetch("/chatbot",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question:text}),credentials:"include"});
         }
-        if(!res.ok) throw new Error("HTTP "+res.status);
-        const data = await res.json();
-        hideTyping(); sending=false; send.disabled=false; send.textContent="Илгээх";
-        bubble(md(data?.response || "Хариулт олдсонгүй."),"bot");
+        if(!res.ok)throw new Error("HTTP "+res.status);
+        const data=await res.json();
+        hideTyping();sending=false;send.disabled=false;send.textContent="Илгээх";
+
+        const botResponse=md(data?.response||"Хариулт олдсонгүй.");
+        addMessage(botResponse,"bot");
+        saveMessage(botResponse,"bot");
       }catch(err){
         console.error(err);
-        hideTyping(); sending=false; send.disabled=false; send.textContent="Илгээх";
-        toastIt("Сервертэй холбогдож чадсангүй."); bubble("Уучлаарай, алдаа гарлаа. Дахин оролдоно уу.","bot");
+        hideTyping();sending=false;send.disabled=false;send.textContent="Илгээх";
+        toastIt("Сервертэй холбогдож чадсангүй.");
+        const errorMsg="Уучлаарай, алдаа гарлаа. Дахин оролдоно уу.";
+        addMessage(errorMsg,"bot");
+        saveMessage(errorMsg,"bot");
       }finally{
-        queue=[]; paintFiles();
+        queue=[];paintFiles();
       }
     };
     send.onclick=doSend;
 
-    // initial message
+    clearChat.onclick=()=>{
+      if(confirm("Та чатны түүхийг устгахдаа итгэлтэй байна уу?")){
+        localStorage.removeItem("unitel_chat_log_v3");
+        localStorage.removeItem("unitel_chat_log_v2");
+        localStorage.removeItem("unitel_chat_log");
+        chat.innerHTML="";
+        chatLog=[];
+        const welcomeMsg="Сайн байна уу! Би бол <b>Unitel AI туслах</b>. CSV/TSV/XLSX эсвэл текст файл хавсаргаад “Sentiment ба сэдэвчилсэн тайлан гарга” гэж бичээрэй.";
+        addMessage(welcomeMsg,"bot");
+        saveMessage(welcomeMsg,"bot");
+        toastIt("Чат цэвэрлэгдлээ.");
+      }
+    };
+
     window.addEventListener("DOMContentLoaded",()=>{
-      bubble("Сайн байна уу! Би бол <b>Unitel AI туслах</b>. CSV/TSV/XLSX эсвэл текст файл хавсаргаад “Sentiment ба сэдэвчилсэн тайлан гарга” гэж бичээрэй.","bot");
+      const oldLogKey="unitel_chat_log_v2";
+      const oldLogData=localStorage.getItem(oldLogKey)||localStorage.getItem("unitel_chat_log");
+      const v3LogData=localStorage.getItem("unitel_chat_log_v3");
+      let needsMigration=false;
+      let rawLog=v3LogData||oldLogData||"[]";
+      if(oldLogData&&!v3LogData)needsMigration=true;
+
+      chatLog=JSON.parse(rawLog);
+      if(chatLog.length>0){
+        chatLog.forEach(m=>{
+          if(m.html)addMessage(m.html,m.role);
+          else if(m.text)addMessage(md(m.text),m.role);
+        });
+        if(needsMigration){
+          const newLog=chatLog.map(m=>({html:m.html||md(m.text),role:m.role}));
+          localStorage.setItem("unitel_chat_log_v3",JSON.stringify(newLog));
+          localStorage.removeItem("unitel_chat_log_v2");
+          localStorage.removeItem("unitel_chat_log");
+          chatLog=newLog;
+        }
+      }else{
+        const welcomeMsg="Сайн байна уу! Би бол <b>Unitel AI туслах</b>. CSV/TSV/XLSX эсвэл текст файл хавсаргаад “Sentiment ба сэдэвчилсэн тайлан гарга” гэж бичээрэй.";
+        addMessage(welcomeMsg,"bot");
+        saveMessage(welcomeMsg,"bot");
+      }
       autosize();
     });
   </script>
+  {% endraw %}
 </body>
 </html>

@@ -121,6 +121,14 @@
       <div class="chip active" data-site="all">Бүгд</div>
       {% for g in groups %}<div class="chip" data-site="{{ g.grouper }}">{{ g.grouper }}</div>{% endfor %}
     </div>
+
+    <!-- 🔹 NEW STATUS FILTER -->
+    <div class="chips" id="statusChips">
+      <div class="chip active" data-status="all">Бүгд</div>
+      <div class="chip" data-status="active">🟢 Идэвхтэй</div>
+      <div class="chip" data-status="ended">🟠 Дууссан</div>
+    </div>
+
     <label class="search">
       🔎
       <input id="q" type="search" placeholder="Хайх (брэнд, шалтгаан, линк)…"/>
@@ -222,7 +230,6 @@
   function startTimers(){
     startedAt=Date.now();
     timeTimer=setInterval(tick, 1000);
-    // live log
     logWrap.classList.remove('hidden');
     logTimer=setInterval(fetchLog, 1200);
   }
@@ -259,7 +266,6 @@
       btn.disabled = true;
       setBanner('info','Scraper эхлүүлж байна…','',true);
       const res = await fetch('/scraper/scrape-now', { method:'POST', headers:{'X-Requested-With':'fetch'} });
-      // шууд polling эхлүүлнэ
       startTimers();
       pollStatus(true);
     }catch(e){
@@ -312,7 +318,27 @@
     });
   }
 
-  // Search within table rows (brand, reason, landing, site)
+  // ✅ NEW: Filter by status
+  const statusWrap = $("#statusChips");
+  if(statusWrap){
+    statusWrap.addEventListener('click',(e)=>{
+      const chip = e.target.closest('.chip'); if(!chip) return;
+      $$('#statusChips .chip').forEach(c=>c.classList.remove('active'));
+      chip.classList.add('active');
+      const st = chip.dataset.status;
+
+      $$('.row').forEach(r=>{
+        const badge = r.querySelector('.c-status .badge');
+        const text = (badge?.innerText||'').toLowerCase();
+        let visible = true;
+        if(st==='active') visible = text.includes('идэвхтэй') || text.includes('active');
+        else if(st==='ended') visible = text.includes('дууссан') || text.includes('inactive');
+        r.style.display = visible ? '' : 'none';
+      });
+    });
+  }
+
+  // Search
   function applySearch(){
     const q = (searchInput?.value || '').trim().toLowerCase();
     $$('.site').forEach(sec=>{
@@ -336,11 +362,9 @@
     searchInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); applySearch(); } });
   }
 
-  // init
   document.addEventListener('DOMContentLoaded', async ()=>{
     setBanner('info','Бэлэн.');
     applySeen();
-    // сервер дээр өмнөх ажил байж магадгүй — шууд шалгана
     try{
       const res = await fetch('/scraper/status?ts=' + Date.now(), {cache:'no-store'});
       if(res.ok){

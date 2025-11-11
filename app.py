@@ -30,6 +30,8 @@ from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from bson import ObjectId
 
+
+
 # ---- Auth (Flask-Login)
 from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
@@ -516,34 +518,88 @@ def download_xlsx():
 app.register_blueprint(scraper_bp)
 
 # --------------------------- Chatbot API (Sentiment + Files) ---------------------------
+# --------------------------- Chatbot API (Sentiment + Files) ---------------------------
+from flask import make_response
+import uuid
+
 @app.post("/chatbot")
 @login_required
 def chatbot() -> Any:
-    # 1) multipart/form-data (текст + файлууд)
+    """
+    Chatbot endpoint — текст болон файл аплоадыг зэрэг дэмжинэ.
+    """
+    message = ""
+    files: List[FileStorage] = []
+
+    # 1️⃣ multipart/form-data (файлтай хүсэлт)
     if request.content_type and request.content_type.startswith("multipart/form-data"):
         message = (request.form.get("message") or request.form.get("question") or "").strip()
-        files: List[FileStorage] = request.files.getlist("files")
-        tmp_dir = (Path(app.static_folder) / "tmp").resolve()
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-        saved_paths: List[str] = []
-        for f in files:
-            if not f or not f.filename:
-                continue
-            p = tmp_dir / secure_filename(f.filename)
-            f.save(p)
-            saved_paths.append(str(p))
-        reply = processor.chatbot_response(message, files=saved_paths)
-        return jsonify({"response": reply})
+        files = request.files.getlist("files")
 
-    # 2) JSON only
-    data = request.get_json(silent=True) or {}
-    message = (data.get("question") or data.get("message") or "").strip()
-    if not message:
+    # 2️⃣ JSON body (файлгүй, текст хүсэлт)
+    elif request.is_json:
+        data = request.get_json(silent=True) or {}
+        message = (data.get("question") or data.get("message") or "").strip()
+
+    # 3️⃣ Фallback (form-urlencoded)
+    else:
+        message = (request.form.get("message") or "").strip()
+
+    if not message and not files:
         return jsonify({"response": "Асуулт хоосон байна, дахин оролдоно уу."})
-    command = chatbot_command_router(message)
-    if command:
-        return jsonify(command)
-    return jsonify({"response": processor.chatbot_response(message)})
+
+    # --- 4️⃣ Session ID үүсгэх эсвэл cookie-с авах ---
+    session_id = request.cookies.get("session_id") or str(uuid.uuid4())
+
+    # --- 5️⃣ Түр хадгалах файл зам ---
+    tmp_dir = (Path(app.static_folder) / "tmp").resolve()
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    saved_paths: List[str] = []
+
+    for f in files:
+        if not f or not f.filename:
+            continue
+        p = tmp_dir / secure_filename(f.filename)
+        f.save(p)
+        saved_paths.append(str(p))
+
+    # --- 6️⃣ JSON командыг шалгах ---
+    if message:
+        try:
+            from processor.prompt_builder import chatbot_command_router
+            command = chatbot_command_router(message)
+            if command:
+                return jsonify(command)
+        except Exception:
+            pass
+
+    # --- 7️⃣ Chatbot процесс дуудах ---
+    reply = processor.process_query(message, session_id, files=saved_paths)
+
+    # --- 8️⃣ Session ID-г cookie хэлбэрээр хадгалах ---
+    response = make_response(jsonify({"response": reply, "html": True}))
+    response.set_cookie("session_id", session_id, max_age=3600 * 24 * 7)  # cookie 7 хоног хадгална
+    return response
+
+# ---------------- Downloads (facebook/json/xlsx) ----------------
+from flask import send_from_directory
+from pathlib import Path
+
+@app.route("/downloads/<path:filename>")
+@login_required
+def serve_downloads(filename):
+    """
+    Татаж авах файлуудыг (JSON/XLSX) project_root/data/downloads/ дотроос serve хийнэ.
+    """
+    DOWNLOAD_DIR = Path(__file__).resolve().parent / "data" / "downloads"
+    file_path = DOWNLOAD_DIR / filename
+
+    if not file_path.exists():
+        return "File not found", 404
+
+    return send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True)
+
+
 
 # --------------------------- Ads summary API ---------------------------
 @app.get("/ads/api/summary")
@@ -690,6 +746,69 @@ def admin_users():
     actv = list(users_collection.find({"approved": True}).sort("created_at", DESCENDING))
     return render_template("admin_users.html", pending=pend, active=actv)
 
+# ---- Admin: create user (from Admin panel)
+@app.post("/admin/users/create")
+@admin_required
+def admin_create_user():
+    name = (request.form.get("name") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    role = (request.form.get("role") or "user").strip().lower()
+    approved = bool(request.form.get("approved"))
+
+    if not EMAIL_RE.match(email):
+        return render_template("admin_users.html",
+                               error=f"{ALLOW_DOMAIN} домэйнтэй имэйл шаардлагатай.",
+                               pending=list(users_collection.find({"approved": False}).sort("created_at", DESCENDING)),
+                               active=list(users_collection.find({"approved": True}).sort("created_at", DESCENDING)))
+
+    if users_collection.find_one({"email": email}):
+        return render_template("admin_users.html",
+                               error="Энэ имэйл бүртгэлтэй байна.",
+                               pending=list(users_collection.find({"approved": False}).sort("created_at", DESCENDING)),
+                               active=list(users_collection.find({"approved": True}).sort("created_at", DESCENDING)))
+
+    import secrets
+    temp_pw = "U!" + secrets.token_hex(4)
+
+    users_collection.insert_one({
+        "name": name or email.split("@")[0],
+        "email": email,
+        "password_hash": generate_password_hash(temp_pw),
+        "role": role if role in ("admin", "user") else "user",
+        "approved": approved,
+        "created_at": datetime.utcnow(),
+        "last_login": None,
+    })
+
+    ok = f"{email} хэрэглэгч нэмэгдлээ (түр нууц үг: {temp_pw})"
+    pend = list(users_collection.find({"approved": False}).sort("created_at", DESCENDING))
+    actv = list(users_collection.find({"approved": True}).sort("created_at", DESCENDING))
+    return render_template("admin_users.html", ok=ok, pending=pend, active=actv)
+
+
+# ---- Admin: delete user
+@app.post("/admin/users/<uid>/delete")
+@admin_required
+def admin_delete(uid):
+    users_collection.delete_one({"_id": ObjectId(uid)})
+    return redirect(url_for("admin_users"))
+
+
+# ---- Admin: promote user -> admin
+@app.post("/admin/users/<uid>/promote")
+@admin_required
+def admin_promote(uid):
+    users_collection.update_one({"_id": ObjectId(uid)}, {"$set": {"role": "admin"}})
+    return redirect(url_for("admin_users"))
+
+
+# ---- Admin: demote admin -> user
+@app.post("/admin/users/<uid>/demote")
+@admin_required
+def admin_demote(uid):
+    users_collection.update_one({"_id": ObjectId(uid)}, {"$set": {"role": "user"}})
+    return redirect(url_for("admin_users"))
+
 @app.post("/admin/users/<uid>/approve")
 @admin_required
 def admin_approve(uid):
@@ -757,3 +876,23 @@ def forbidden(_):
 if __name__ == "__main__":
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
     app.run(host="0.0.0.0", port=PORT, debug=debug, use_reloader=False, threaded=True)
+
+# ---------------- Scraper downloads ----------------
+@app.route("/scraper/download/<fmt>")
+@login_required
+def scraper_download(fmt: str):
+    """
+    Scraper-аас үүссэн summary.tsv / summary.xlsx файлуудыг татах линк
+    """
+    base_dir = Path(__file__).resolve().parent / "scraper" / "_export"
+    if fmt == "tsv":
+        path = base_dir / "summary.tsv"
+    elif fmt == "xlsx":
+        path = base_dir / "summary.xlsx"
+    else:
+        abort(404, "Unknown format")
+
+    if not path.exists():
+        abort(404, f"Файл олдсонгүй: {path.name}")
+
+    return send_from_directory(base_dir, path.name, as_attachment=True)
