@@ -192,16 +192,28 @@ def save_to_json(data: Any, filename="fb_data.json"):
     return str(out_path)
 
 
-def export_to_xlsx(data: List[Dict[str, Any]], filename="fb_data.xlsx"):
-    """Export to Excel in /data/downloads."""
-    df = _to_df(data)
+from pathlib import Path
+
+# Төслийн үндсэн хавтас руу заах
+BASE_DIR = Path(__file__).resolve().parent.parent
+DOWNLOADS_DIR = BASE_DIR / "data" / "downloads"
+
+def export_to_xlsx(data: List[Dict[str, Any]], filename: str):
+    """Export ANY dataset to XLSX inside /data/downloads/"""
+    df = pd.DataFrame(data)
     if df.empty:
         print("⚠️ No data for Excel export.")
-        return
+        return None
+    
+    # Ensure folder exists
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
     out_path = DOWNLOADS_DIR / filename
     df.to_excel(out_path, index=False)
     print(f"📘 Saved {len(df)} rows → {out_path}")
-    return str(out_path)
+    
+    # Flask route-д зөв ажиллах зам буцаах
+    return f"/data/downloads/{filename}"
+
 
 
 # ======================================================

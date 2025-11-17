@@ -9,12 +9,14 @@ import shutil
 import subprocess
 import sys
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from threading import Lock, Thread
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import urlparse
 from collections import deque
 import re
+from flask import send_from_directory
+from pathlib import Path
+
 
 from dotenv import load_dotenv, dotenv_values
 from flask import (
@@ -37,17 +39,26 @@ from flask_login import (
     LoginManager, UserMixin, login_user, logout_user,
     current_user, login_required
 )
+from processor import process_query
 
-import processor  # таны chatbot / sentiment логик
 
 # --------------------------- Boot & Config ---------------------------
 load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("app")
 
+# ✅ 1. ЗАСВАР: ROOT_DIR, BASE_DIR, DOWNLOADS_DIR-г энд зөв дарааллаар тодорхойлов.
 ROOT_DIR = Path(__file__).resolve().parent
+BASE_DIR = ROOT_DIR
+DOWNLOADS_DIR = os.path.join(BASE_DIR, "data", "downloads")
+
 TEMPLATES_DIR = ROOT_DIR / "templates"
 STATIC_DIR = ROOT_DIR / "static"
+
+# ⚠️ АСУУДАЛ 3-ИЙН ЗАСВАРЫН НЭГ ХЭСЭГ (Data/Tmp тодорхойлох)
+DATA_DIR = ROOT_DIR / "data"
+TMP_DIR = STATIC_DIR / "tmp"
+
 
 def detect_scraper_dir(root: Path) -> Path:
     override = (os.getenv("SCRAPER_DIR_OVERRIDE") or os.getenv("SCRAPER_DIR") or "").strip()
@@ -65,11 +76,20 @@ BANNER_SCREENSHOT_DIR = (Path(os.getenv("OUT_DIR") or (SCRAPER_DIR / "banner_scr
 TSV_PATH = Path(os.getenv("TSV_PATH") or (SCRAPER_DIR / "banner_tracking_combined.tsv")).resolve()
 UPLOAD_ROOT = STATIC_DIR / "ads"
 LOG_DIR = SCRAPER_DIR / "_logs"
-for d in (STATIC_DIR, UPLOAD_ROOT, BANNER_SCREENSHOT_DIR, SCRAPER_EXPORT_DIR, LOG_DIR):
-    d.mkdir(parents=True, exist_ok=True)
+
+# ⚠️ АСУУДАЛ 3-ИЙН ЗАСВАР (chmod 777 -> mode=0o777)
+# Шаардлагатай бүх хавтаснуудыг 777 эрхтэйгээр (mode=0o777) үүсгэнэ.
+for d in (
+    STATIC_DIR, UPLOAD_ROOT, BANNER_SCREENSHOT_DIR, SCRAPER_EXPORT_DIR, LOG_DIR,
+    DATA_DIR, Path(DOWNLOADS_DIR), TMP_DIR
+):
+    d.mkdir(parents=True, exist_ok=True, mode=0o777)
 
 app = Flask(__name__, template_folder=str(TEMPLATES_DIR), static_folder=str(STATIC_DIR))
 app.config["JSON_SORT_KEYS"] = False
+
+# ✅ 2. ЗАСВАР: Давхардсан, login-гүй route-ийг эндээс устгасан.
+# @app.route('/downloads/<path:filename>') ... (УСТГАСАН)
 
 # --- Session/Cookie хамгаалалт (prod-д HTTPS үед secure)
 SECURE_COOKIES = os.getenv("SESSION_COOKIE_SECURE", "0") == "1"  
@@ -98,11 +118,19 @@ RESET_TOKEN = os.getenv("RESET_TOKEN", "")
 SCRAPER_TIMEOUT = int(os.getenv("SCRAPER_TIMEOUT", "1800"))
 SUMMARIZE_TIMEOUT = int(os.getenv("SUMMARIZE_TIMEOUT", "300"))
 
+# ⚠️ АСУУДАЛ 2-ЫН ЗАСВАР (Windows + Linux venv paths)
 def get_scraper_python() -> str:
     env_py = os.getenv("SCRAPER_PY", "").strip()
     if env_py and Path(env_py).exists():
         return env_py
+    
     candidates = [
+        # Linux/macOS paths
+        ROOT_DIR / ".venv" / "bin" / "python",
+        SCRAPER_DIR / ".venv" / "bin" / "python",
+        ROOT_DIR / "venv" / "bin" / "python",
+        SCRAPER_DIR / "venv" / "bin" / "python",
+        # Windows paths
         ROOT_DIR / ".venv" / "Scripts" / "python.exe",
         SCRAPER_DIR / ".venv" / "Scripts" / "python.exe",
         ROOT_DIR / "venv" / "Scripts" / "python.exe",
@@ -329,7 +357,9 @@ def wipe_directory_contents(path: Path) -> int:
             removed += 1
         except Exception as exc:
             log.warning("Failed to remove %s: %s", ch, exc)
-    path.mkdir(parents=True, exist_ok=True)
+    
+    # ⚠️ АСУУДАЛ 3-ИЙН ЗАСВАР (Permission)
+    path.mkdir(parents=True, exist_ok=True, mode=0o777)
     return removed
 
 # --------------------------- Scraper runner ---------------------------
@@ -553,7 +583,9 @@ def chatbot() -> Any:
 
     # --- 5️⃣ Түр хадгалах файл зам ---
     tmp_dir = (Path(app.static_folder) / "tmp").resolve()
-    tmp_dir.mkdir(parents=True, exist_ok=True)
+    
+    # ⚠️ АСУУДАЛ 3-ИЙН ЗАСВАР (Permission)
+    tmp_dir.mkdir(parents=True, exist_ok=True, mode=0o777)
     saved_paths: List[str] = []
 
     for f in files:
@@ -574,7 +606,8 @@ def chatbot() -> Any:
             pass
 
     # --- 7️⃣ Chatbot процесс дуудах ---
-    reply = processor.process_query(message, session_id, files=saved_paths)
+    reply = process_query(message, session_id, files=saved_paths)
+
 
     # --- 8️⃣ Session ID-г cookie хэлбэрээр хадгалах ---
     response = make_response(jsonify({"response": reply, "html": True}))
@@ -582,8 +615,7 @@ def chatbot() -> Any:
     return response
 
 # ---------------- Downloads (facebook/json/xlsx) ----------------
-from flask import send_from_directory
-from pathlib import Path
+
 
 @app.route("/downloads/<path:filename>")
 @login_required
@@ -625,7 +657,10 @@ def api_upload() -> Any:
     if not file or not file.filename:
         return jsonify({"ok": False, "error": "missing_file"}), 400
     today_dir = UPLOAD_ROOT / utc_now().strftime("%Y-%m-%d")
-    today_dir.mkdir(parents=True, exist_ok=True)
+    
+    # ⚠️ АСУУДАЛ 3-ИЙН ЗАСВАР (Permission)
+    today_dir.mkdir(parents=True, exist_ok=True, mode=0o777)
+    
     filename = secure_filename(file.filename)
     if not filename: return jsonify({"ok": False, "error": "invalid_filename"}), 400
     target = today_dir / filename
@@ -872,11 +907,6 @@ def tools_reset() -> Any:
 def forbidden(_):
     return render_template("login.html", error="Энэ хуудас зөвхөн админд нээлттэй."), 403
 
-# ---- Main ----
-if __name__ == "__main__":
-    debug = os.getenv("FLASK_DEBUG", "0") == "1"
-    app.run(host="0.0.0.0", port=PORT, debug=debug, use_reloader=False, threaded=True)
-
 # ---------------- Scraper downloads ----------------
 @app.route("/scraper/download/<fmt>")
 @login_required
@@ -896,3 +926,8 @@ def scraper_download(fmt: str):
         abort(404, f"Файл олдсонгүй: {path.name}")
 
     return send_from_directory(base_dir, path.name, as_attachment=True)
+
+# ---- Main ----
+if __name__ == "__main__":
+    debug = os.getenv("FLASK_DEBUG", "0") == "1"
+    app.run(host="0.0.0.0", port=PORT, debug=debug, use_reloader=False, threaded=True)
